@@ -117,6 +117,9 @@ under the mouse on mousedown, or double-click stops working.
   Predecessors | Successors panels below; status bar.
 - WBS band rows: bold, colour by level (P6/Python palette in `src/ui/theme.ts`),
   white text on the dark levels, rolled-up start/finish and min total float.
+  Band Original / Remaining Duration are always in calendar weeks from the band's
+  summarised dates (`wbsWeeks`): finish - start, and finish - max(start, data date)
+  (0w when all complete). They deliberately ignore activity durations and calendars.
 - Dates `dd-Mmm-yy`; suffix ` A` for actuals, `*` when a constraint applies.
 - Under each WBS band: its own activities first, then its child WBS bands.
 - Sorting reorders activities WITHIN their WBS; WBS stay in seq_num order.

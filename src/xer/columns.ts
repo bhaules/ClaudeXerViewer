@@ -41,11 +41,28 @@ const STATUS_NAMES = { NotStarted: "Not Started", InProgress: "In Progress", Com
 
 const wbsCal = (w: Wbs) => w.project?.calendar ?? FALLBACK_CAL;
 
+const WEEK_MS = 7 * 86_400_000;
+
+/**
+ * WBS band durations in calendar weeks from the band's summarised dates, ignoring the
+ * activities' own durations. Remaining runs from the later of the start and the data
+ * date; a band whose activities are all complete has 0w remaining.
+ */
+export function wbsWeeks(w: Wbs, remaining: boolean): number | null {
+  if (w.start === null || w.finish === null) return null;
+  if (!remaining) return Math.max(0, w.finish - w.start) / WEEK_MS;
+  if (w.finishActual) return 0;
+  const from = Math.max(w.start, w.project?.dataDate ?? w.start);
+  return Math.max(0, w.finish - from) / WEEK_MS;
+}
+
+const formatWeeks = (weeks: number | null) => (weeks === null ? "" : formatNumber(weeks, 1) + "w");
+
 const durationColumn = (
   key: string,
   label: string,
   pick: (a: Activity) => number | null,
-  wbsPick: ((w: Wbs) => number | null) | null,
+  wbsText: ((w: Wbs, ctx: ColumnContext) => string) | null,
   defaultVisible: boolean,
 ): Column => ({
   key,
@@ -56,7 +73,7 @@ const durationColumn = (
   align: "right",
   defaultVisible,
   text: (a, ctx) => formatDuration(pick(a), a.calendar, ctx.unit),
-  wbsText: (w, ctx) => (wbsPick ? formatDuration(wbsPick(w), wbsCal(w), ctx.unit) : ""),
+  wbsText: wbsText ?? (() => ""),
   sortValue: (a, ctx) => {
     const h = pick(a);
     return h === null ? null : hoursTo(h, a.calendar, ctx.unit);
@@ -127,8 +144,8 @@ const generalColumn = (
 export const COLUMNS: Column[] = [
   generalColumn("code", "Activity ID", 190, (a) => a.code, true, (w) => w.code),
   generalColumn("name", "Activity Name", 320, (a) => a.name, true, (w) => w.name),
-  durationColumn("origDur", "Original Duration", (a) => a.origDurHrs, null, true),
-  durationColumn("remDur", "Remaining Duration", (a) => a.remDurHrs, null, true),
+  durationColumn("origDur", "Original Duration", (a) => a.origDurHrs, (w) => formatWeeks(wbsWeeks(w, false)), true),
+  durationColumn("remDur", "Remaining Duration", (a) => a.remDurHrs, (w) => formatWeeks(wbsWeeks(w, true)), true),
   {
     key: "pct",
     label: "Activity % Complete",
@@ -157,7 +174,13 @@ export const COLUMNS: Column[] = [
     (w) => [w.finish, w.finishActual],
     true,
   ),
-  durationColumn("totalFloat", "Total Float", (a) => a.totalFloatHrs, (w) => w.totalFloatHrs, true),
+  durationColumn(
+    "totalFloat",
+    "Total Float",
+    (a) => a.totalFloatHrs,
+    (w, ctx) => formatDuration(w.totalFloatHrs, wbsCal(w), ctx.unit),
+    true,
+  ),
   durationColumn("freeFloat", "Free Float", (a) => a.freeFloatHrs, null, false),
   generalColumn("status", "Activity Status", 90, (a) => STATUS_NAMES[a.status]),
   generalColumn("type", "Activity Type", 110, (a) => activityTypeName(a.type)),
