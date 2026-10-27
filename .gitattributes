@@ -1,0 +1,2 @@
+# XER files are Windows-1252 with CRLF; store them byte-for-byte.
+*.xer binary

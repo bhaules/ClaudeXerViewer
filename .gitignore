@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# Real client schedules never go in version control. Only sanitized fixtures.
+*.xer
+!tests/fixtures/*.xer

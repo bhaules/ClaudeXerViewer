@@ -1,0 +1,69 @@
+ERMHDR	21.12	2025-02-03	Project	DEMO	Demo User	dbxDatabaseNoName	Project Management	AUST
+%T	UNKNOWNTABLE
+%F	foo
+%R	ignored
+%T	PROJECT
+%F	proj_id	proj_short_name	clndr_id	last_recalc_date	critical_path_type	critical_drtn_hr_cnt	name_sep_char
+%R	100	DEMO-001	10	2025-02-03 08:00	CT_TotFloat	0	.
+%T	CALENDAR
+%F	clndr_id	default_flag	clndr_name	day_hr_cnt	week_hr_cnt	month_hr_cnt	clndr_data
+%R	10	Y	8h 5d	8	40	172	(0||CalendarData()(  (0||DaysOfWeek()(    (0||1()())    (0||2()(      (0||0(s|08:00|f|12:00)())      (0||1(s|12:30|f|16:30)())))    (0||3()(      (0||0(s|08:00|f|12:00)())      (0||1(s|12:30|f|16:30)())))    (0||4()(      (0||0(s|08:00|f|12:00)())      (0||1(s|12:30|f|16:30)())))    (0||5()(      (0||0(s|08:00|f|12:00)())      (0||1(s|12:30|f|16:30)())))    (0||6()(      (0||0(s|08:00|f|12:00)())      (0||1(s|12:30|f|16:30)())))    (0||7()())))  (0||VIEW(ShowTotal|Y)())  (0||Exceptions()(    (0||0(d|45698)())))))
+%R	11	N	10h 6d	10	60	260	(0||CalendarData()(  (0||DaysOfWeek()(    (0||1()())    (0||2()(      (0||0(s|07:00|f|17:00)())))    (0||3()(      (0||0(s|07:00|f|17:00)())))    (0||4()(      (0||0(s|07:00|f|17:00)())))    (0||5()(      (0||0(s|07:00|f|17:00)())))    (0||6()(      (0||0(s|07:00|f|17:00)())))    (0||7()(      (0||0(s|07:00|f|17:00)())))))  (0||VIEW(ShowTotal|Y)())  (0||Exceptions()())))
+%T	SCHEDOPTIONS
+%F	proj_id	sched_calendar_on_relationship_lag
+%R	100	rcal_Predecessor
+%T	PROJWBS
+%F	wbs_id	proj_id	seq_num	proj_node_flag	wbs_short_name	wbs_name	parent_wbs_id
+%R	1	100	1	Y	DEMO-001	Demo Project	999
+%R	3	100	2	N	CON	Construction	1
+%R	2	100	1	N	ENG	Engineering	1
+%R	4	100	3	N	EMPTY	Empty WBS	1
+%R	5	100	1	N	CIV	Civil	3
+%T	TASK
+%F	task_id	proj_id	wbs_id	clndr_id	complete_pct_type	phys_complete_pct	task_type	status_code	task_code	task_name	total_float_hr_cnt	free_float_hr_cnt	remain_drtn_hr_cnt	target_drtn_hr_cnt	cstr_type	act_start_date	act_end_date	late_start_date	restart_date	reend_date	early_start_date	early_end_date	target_start_date	target_end_date	driving_path_flag	target_work_qty	act_work_qty	remain_work_qty
+%R	1001	100	1	10	CP_Drtn		TT_Mile	TK_Complete	A1000	Project Start			0	0		2025-01-06 08:00		1899-12-30 00:00					2025-01-06 08:00					
+%R	1002	100	2	10	CP_Drtn		TT_Task	TK_Active	E1000	Design – Civil	40		80	160		2025-01-07 08:00			2025-02-03 08:00	2025-02-14 16:00	2025-02-03 08:00	2025-02-14 16:00	2025-01-06 08:00	2025-01-31 16:00		160	80	80
+%R	1003	100	2	10	CP_Phys	0	TT_Task	TK_NotStart	E1010	Design Review	0		40	40	CS_MSOA						2025-02-17 08:00	2025-02-21 16:00						
+%R	1004	100	5	11	CP_Drtn		TT_Task	TK_NotStart	C1000	Excavation	-10		80	80							2025-03-03 07:00	2025-03-12 17:00				240	0	240
+%R	1005	100	3	11	CP_Drtn		TT_Task	TK_NotStart	C1010	Contractor’s Mobilisation	100		50	50							2025-02-24 07:00	2025-02-28 17:00				100.5	0	100.5
+%R	1006	100	777	99	CP_Drtn		TT_Task	TK_NotStart	Z9999	Orphan activity			8	8							2025-02-03 08:00	2025-02-03 16:00						
+%R	1007	100	1	10	CP_Drtn		TT_FinMile	TK_NotStart	F1000	Project Finish	-10		0	0	CS_MEOB						2025-03-13 08:00	2025-03-13 08:00						
+%T	RSRC
+%F	rsrc_id	parent_rsrc_id	rsrc_name	rsrc_short_name	rsrc_type
+%R	50		Civil Crew	CIV	RT_Labor
+%R	51		Engineer	ENG	RT_Labor
+%R	52		Unused	UNUSED	RT_Equip
+%T	TASKRSRC
+%F	taskrsrc_id	task_id	proj_id	rsrc_id	remain_qty	target_qty	act_reg_qty	act_ot_qty	act_start_date	act_end_date	restart_date	reend_date	target_start_date	target_end_date
+%R	70	1002	100	51	80	160	75	5	2025-01-07 08:00		2025-02-03 08:00	2025-02-14 16:30		
+%R	71	1004	100	50	240	240					2025-03-03 07:00	2025-03-12 17:00		
+%R	72	1005	100	50	100.5	100.5					2025-02-24 07:00	2025-02-28 17:00		
+%R	73	1004	100		10	10					2025-03-03 07:00	2025-03-12 17:00		
+%R	74	9999	100	50	10	10					2025-03-03 07:00	2025-03-12 17:00		
+%T	UDFTYPE
+%F	udf_type_id	table_name	udf_type_name	udf_type_label	logical_data_type
+%R	900	TASK	user_field_900	Area	FT_TEXT
+%R	901	TASK	user_field_901	Men per Day	FT_FLOAT_2_DECIMALS
+%R	902	TASK	user_field_902	Traffic Light	FT_STATICTYPE
+%R	903	TASK	user_field_903	Unused	FT_TEXT
+%R	904	PROJWBS	user_field_904	WBS Note	FT_TEXT
+%R	905	TASK	user_field_905	Review Date	FT_END_DATE
+%T	UDFVALUE
+%F	udf_type_id	fk_id	proj_id	udf_date	udf_number	udf_text	udf_code_id
+%R	900	1002	100			North	
+%R	900	1004	100			South	
+%R	900	1005	100			East	
+%R	901	1002	100		2.5		
+%R	902	1004	100			UDF_G1	
+%R	904	2	100			WBS only	
+%R	905	1003	100	2025-02-20 00:00			
+%R	900	9999	100			No such activity	
+%T	TASKPRED
+%F	task_pred_id	task_id	pred_task_id	proj_id	pred_proj_id	pred_type	lag_hr_cnt	aref	arls
+%R	1	1002	1001	100	100	PR_FS	0	2025-01-06 08:00	
+%R	2	1003	1002	100	100	PR_FS	0	2025-02-14 16:30	
+%R	3	1004	1003	100	100	PR_SS	16	2025-02-19 08:00	
+%R	4	1005	1002	100	100	PR_FF	-8	2025-02-28 17:00	
+%R	5	1007	1004	100	100	PR_FS	0		
+%R	6	1004	5555	100	100	PR_FS	0		
+%E
