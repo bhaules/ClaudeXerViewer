@@ -27,6 +27,7 @@ export class FilterBar {
   private statusBoxes = new Map<Status, HTMLInputElement>();
   private critical: HTMLInputElement;
   private milestones: HTMLInputElement;
+  private commented: HTMLInputElement;
   private from: HTMLInputElement;
   private to: HTMLInputElement;
   private lookahead: HTMLSelectElement;
@@ -55,8 +56,10 @@ export class FilterBar {
     }
     const [critWrap, crit] = check("Critical", (on) => (this.host.state().criticalOnly = on));
     const [mileWrap, mile] = check("Milestones", (on) => (this.host.state().milestonesOnly = on));
+    const [cmtWrap, cmt] = check("With comments", (on) => (this.host.state().commentedOnly = on));
     this.critical = crit;
     this.milestones = mile;
+    this.commented = cmt;
 
     this.from = dateInput();
     this.to = dateInput();
@@ -94,7 +97,7 @@ export class FilterBar {
       el("span", "fb-title", ["Filter"]),
       el("span", "fb-group", statusEls),
       el("span", "fb-sep"),
-      el("span", "fb-group", [critWrap, mileWrap]),
+      el("span", "fb-group", [critWrap, mileWrap, cmtWrap]),
       el("span", "fb-sep"),
       el("span", "fb-group", [el("span", "", ["Active between"]), this.from, el("span", "", ["and"]), this.to, this.lookahead]),
       el("span", "fb-sep"),
@@ -109,6 +112,7 @@ export class FilterBar {
     for (const [status, box] of this.statusBoxes) box.checked = s.statuses.has(status);
     this.critical.checked = s.criticalOnly;
     this.milestones.checked = s.milestonesOnly;
+    this.commented.checked = s.commentedOnly;
     this.from.value = toInput(s.from);
     this.to.value = toInput(s.to);
     this.lookahead.value = "";

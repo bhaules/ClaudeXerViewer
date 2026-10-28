@@ -32,6 +32,10 @@ export interface GridHost {
   onToggle(index: number): void;
   onSelect(index: number): void;
   onActivate(index: number): void;
+  /** [open, done] comment counts for a row, or null for none. */
+  commentBadge(row: GridRow): [number, number] | null;
+  /** Right-click on a row (already selected by the mousedown). */
+  onRowMenu(index: number, x: number, y: number): void;
   onScroll(scrollTop: number): void;
 }
 
@@ -97,6 +101,12 @@ export class Grid {
       if (i < 0) return;
       if ((e.target as HTMLElement).closest(".tog")) this.host.onToggle(i);
       else this.host.onSelect(i);
+    });
+    this.body.addEventListener("contextmenu", (e) => {
+      const i = this.rowIndexAt(e);
+      if (i < 0) return;
+      e.preventDefault();
+      this.host.onRowMenu(i, e.clientX, e.clientY);
     });
     this.body.addEventListener("dblclick", (e) => {
       const i = this.rowIndexAt(e);
@@ -276,6 +286,12 @@ export class Grid {
           row.kind === "wbs"
             ? `<span class="tog${this.host.expanded(row.wbs.id) ? " open" : ""}"></span>`
             : `<span class="${iconClass(row.act)}"></span>`;
+        const badge = this.host.commentBadge(row);
+        if (badge) {
+          const [open, done] = badge;
+          const tip = `${open} open, ${done} done comment${open + done === 1 ? "" : "s"}`;
+          lead += `<span class="cbadge${open ? "" : " alldone"}" title="${tip}">${open || done}</span>`;
+        }
       }
       const title = text.length > 20 || c.html ? ` title="${esc(text)}"` : "";
       const content = c.html && row.kind === "act" ? c.html(row.act) : esc(text);

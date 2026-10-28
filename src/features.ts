@@ -19,6 +19,8 @@ export const FEATURES = {
   sorting: true,
   /** View > Columns menu. */
   columnChooser: true,
+  /** Review menu: comments on activities/WBS, saved inside the HTML, merged from reviewers' files. */
+  comments: true,
   /** File > Save Viewer with Schedule (one HTML file with the .xer inside). */
   embedSave: true,
   /** WBS levels expanded when a file opens. */

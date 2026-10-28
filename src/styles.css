@@ -223,6 +223,69 @@ body {
 .hist-tip tr.tt-total td { border-top: 1px solid #ddd; font-weight: 600; padding-top: 3px; }
 .hist-tip .tt-none { color: var(--muted); }
 
+/* ---------- Review comments ---------- */
+.cbadge {
+  flex: none; min-width: 16px; height: 14px; margin-right: 5px; padding: 0 4px; border-radius: 7px 7px 7px 2px;
+  background: #f0a500; color: #000; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center;
+}
+.cbadge.alldone { background: #c9c9c9; color: #444; }
+.row.wbs .cbadge { color: #000; }
+.cm-pane { flex: 1; }
+.cm-bar {
+  flex: none; display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 3px 8px;
+  background: var(--chrome); border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden;
+}
+.cm-bar select { height: 22px; font: inherit; border: 1px solid #a8a8a8; background: #fff; }
+.cm-bar .btn { height: 22px; }
+.cm-summary { margin-left: auto; color: var(--muted); }
+.cm-table td { vertical-align: top; padding-top: 3px; padding-bottom: 3px; height: auto; }
+.cm-table td.c { text-align: center; }
+.cm-table .cm-text { white-space: pre-wrap; max-width: 460px; min-width: 220px; overflow-wrap: anywhere; }
+.cm-table .cm-target { max-width: 260px; }
+.cm-table .cm-notes { color: #8a5a00; white-space: normal; max-width: 260px; }
+.cm-table .cm-actions { white-space: nowrap; }
+.cm-table .cm-actions .btn { height: 20px; padding: 0 8px; margin-right: 4px; font-size: 11px; }
+.cm-table tr.cm-isdone td { color: #8a8a8a; }
+.cm-table tr.cm-isdone .cm-text { text-decoration: line-through; text-decoration-color: #bbb; }
+.cm-type { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 11px; background: #e6e6e6; }
+.cm-type.t-Question { background: #dbeafe; }
+.cm-type.t-Changerequest { background: #fde7c7; }
+.cm-type.t-Error { background: #fbd5d5; }
+.dlg-foot { display: flex; justify-content: flex-end; gap: 6px; }
+.dlg-label { display: block; font-weight: 600; margin-bottom: 4px; }
+.dlg-input { width: 100%; height: 26px; padding: 0 6px; font: inherit; border: 1px solid #a8a8a8; }
+.dlg-about { font-weight: 600; margin-bottom: 10px; }
+.dlg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dlg-row .dlg-label { display: inline; margin: 0; }
+.dlg-select { height: 24px; font: inherit; border: 1px solid #a8a8a8; }
+.dlg-by { margin-left: auto; color: var(--muted); }
+.dlg-text { width: 100%; font: inherit; padding: 6px; border: 1px solid #a8a8a8; resize: vertical; user-select: text; }
+.dlg-input:focus, .dlg-text:focus, .dlg-select:focus { outline: 1px solid #3c8be0; border-color: #3c8be0; }
+.dlg-note { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
+.dlg-warn { color: #c0110c; margin-top: 4px; }
+
+/* ---------- Help ---------- */
+.modal.modal-wide { width: 820px; }
+.modal-wide .mbody { padding: 0; }
+.hg { display: flex; height: min(560px, calc(100vh - 140px)); }
+.hg-toc { flex: none; width: 190px; padding: 10px 0; background: #f7f9fc; border-right: 1px solid #ddd; overflow: auto; }
+.hg-toc ul { list-style: none; margin: 0; padding: 0; }
+.hg-toc a { display: block; padding: 5px 14px; color: var(--text); text-decoration: none; border-left: 3px solid transparent; }
+.hg-toc a:hover { background: #e8f1fb; border-left-color: var(--accent); }
+.hg-body { flex: 1; overflow: auto; padding: 4px 20px 20px; position: relative; }
+.hg-body h3 { font-size: 14px; margin: 18px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #e3e3e3; }
+.hg-body p, .hg-body li { line-height: 1.5; }
+.hg-body ul, .hg-body ol { padding-left: 20px; margin: 6px 0; }
+.hg-body li { margin: 3px 0; }
+.hg-body code { background: #f1f1f1; padding: 0 4px; border-radius: 2px; }
+.hg-sw { display: inline-block; vertical-align: -1px; margin-right: 4px; background: var(--c); }
+.hg-bar { width: 22px; height: 9px; border: 1px solid rgba(0,0,0,.35); }
+.hg-diamond { width: 9px; height: 9px; transform: rotate(45deg); margin: 0 6px 0 3px; border: 1px solid rgba(0,0,0,.5); }
+.hg-summary { width: 22px; height: 5px; }
+.hg-line { width: 0; height: 12px; border-left: 2px dashed var(--c); background: none; vertical-align: -2px; }
+.hg-keys td { padding: 3px 18px 3px 0; }
+.welcome .welcome-help { display: inline-block; margin-top: 10px; color: #1f5fbf; }
+
 /* ---------- Find dialog ---------- */
 .find {
   position: fixed; top: 60px; right: 40px; width: 360px; z-index: 40;

@@ -37,17 +37,19 @@ export function splitter(direction: "v" | "h", onStart: () => void, onDrag: (del
   return handle;
 }
 
-export function modal(title: string, bodyHtml: string): void {
+/** A message box. `className` adds a size variant, e.g. "modal-wide" for the user guide. */
+export function modal(title: string, bodyHtml: string, className = ""): HTMLElement {
   const close = () => back.remove();
   const x = el("button", "xbtn", ["×"]);
   x.addEventListener("click", close);
-  const ok = el("button", "btn primary", ["OK"]);
+  const ok = el("button", "btn primary", [className ? "Close" : "OK"]);
   ok.addEventListener("click", close);
-  const box = el("div", "modal", [el("div", "fhead", [el("span", "", [title]), x]), el("div", "mbody"), el("div", "mfoot", [ok])]);
+  const box = el("div", `modal ${className}`.trim(), [el("div", "fhead", [el("span", "", [title]), x]), el("div", "mbody"), el("div", "mfoot", [ok])]);
   box.querySelector(".mbody")!.innerHTML = bodyHtml;
   const back = el("div", "modal-back", [box]);
   back.addEventListener("mousedown", (e) => e.target === back && close());
   back.addEventListener("keydown", (e) => e.key === "Escape" && close());
   document.body.append(back);
   ok.focus();
+  return box;
 }

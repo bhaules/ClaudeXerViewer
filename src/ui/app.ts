@@ -1,8 +1,19 @@
 // Wires the model, grid, Gantt, panels, menus and keyboard together.
-import { buildEmbeddedHtml, downloadText } from "../embed";
+import { buildEmbeddedHtml, downloadText, extractEmbeddedXer } from "../embed";
 import { FEATURES } from "../features";
 import { loadSchedule } from "../xer";
 import { COLUMN_BY_KEY, COLUMNS, scheduleColumns, type Column } from "../xer/columns";
+import {
+  extractCommentsFromHtml,
+  liveComments,
+  mergeComments,
+  newCommentId,
+  parseComments,
+  snapshotOf,
+  targetFor,
+  targetKey,
+  type ReviewComment,
+} from "../xer/comments";
 import { formatDate, type DurationUnit } from "../xer/format";
 import { compileFilter, emptyFilter, filterActive, type CompiledFilter, type FilterState } from "../xer/filter";
 import { applyRollups, type Activity, type Relationship, type Schedule, type Wbs } from "../xer/model";
@@ -20,10 +31,12 @@ import { el, esc, modal, splitter } from "./dom";
 import { openColumnsDialog } from "./columns-dialog";
 import { Gantt } from "./gantt";
 import { Grid } from "./grid";
-import { MenuBar, type MenuItem } from "./menu";
+import { askReviewerName, CommentsPanel, describeTarget, editCommentDialog } from "./comments";
+import { MenuBar, popupMenu, type MenuItem } from "./menu";
 import { RelationsPanel } from "./relations";
 import { DEFAULT_HISTOGRAM, ResourcePanel, type HistogramSettings } from "./resources";
 import { FilterBar } from "./filterbar";
+import { showAbout, showShortcuts, showUserGuide } from "./help";
 import { Search } from "./search";
 
 const PREFS_KEY = "xer-viewer-prefs-v1";
@@ -39,9 +52,14 @@ interface Prefs {
   showFilters: boolean;
   bottomTab: BottomTab;
   histogram: HistogramSettings;
+  /** Name shown on review comments made in this browser. */
+  reviewer: string;
 }
 
-type BottomTab = "relationships" | "resources";
+type BottomTab = "relationships" | "resources" | "comments";
+
+/** Unsaved comments are also kept here, per project, so closing the tab doesn't lose them. */
+const DRAFT_KEY = "xer-viewer-comment-draft:";
 
 type RelLines = "none" | "driving" | "all";
 
@@ -56,6 +74,7 @@ const DEFAULT_PREFS: Prefs = {
   showFilters: FEATURES.filters,
   bottomTab: "relationships",
   histogram: DEFAULT_HISTOGRAM,
+  reviewer: "",
 };
 
 function loadPrefs(): Prefs {
@@ -73,6 +92,11 @@ function loadPrefs(): Prefs {
 
 function isActivity(x: Activity | Wbs): x is Activity {
   return "wbs" in x;
+}
+
+/** The comment-index key for a grid row (matches `targetKey`). */
+function rowKey(r: GridRow): string {
+  return r.kind === "wbs" ? `wbs|${r.wbs.fullCode}` : `activity|${r.act.code}`;
 }
 
 export class App {
@@ -115,6 +139,15 @@ export class App {
   private filterState: FilterState = emptyFilter();
   private compiled: CompiledFilter = { test: null, errors: new Set() };
   private filterTimer: ReturnType<typeof setTimeout> | undefined;
+  /** All review comments, including deleted ones (kept so merges can't revive them). */
+  private comments: ReviewComment[] = [];
+  /** targetKey -> [open, done] counts of live comments. */
+  private commentIndex = new Map<string, [number, number]>();
+  /** Comments changed since the last save. */
+  private commentsDirty = false;
+  private commentsPanel!: CommentsPanel;
+  private commentsTab: HTMLElement | null = null;
+  private importInput!: HTMLInputElement;
 
   constructor(mount: HTMLElement) {
     this.grid = new Grid({
@@ -147,6 +180,8 @@ export class App {
       onActivate: (i) => this.activate(i),
       // The scrollTop setters ignore equal values, so the echo scroll event stops the loop.
       onScroll: (top) => (this.gantt.scrollTop = top),
+      commentBadge: (r) => (FEATURES.comments ? this.commentIndex.get(rowKey(r)) ?? null : null),
+      onRowMenu: (i, x, y) => this.rowMenu(i, x, y),
     });
 
     this.gantt = new Gantt({
@@ -179,6 +214,7 @@ export class App {
       { label: "File", items: () => this.fileMenu() },
       { label: "Edit", items: () => this.editMenu() },
       { label: "View", items: () => this.viewMenu() },
+      ...(FEATURES.comments ? [{ label: "Review", items: () => this.reviewMenu() }] : []),
       { label: "Help", items: () => this.helpMenu() },
     ]);
 
@@ -220,21 +256,36 @@ export class App {
     // Keep the resource list exactly as wide as the grid above it.
     new ResizeObserver(() => this.syncResourceListWidth()).observe(this.grid.root);
 
+    this.commentsPanel = new CommentsPanel({
+      schedule: () => this.schedule,
+      comments: () => this.comments,
+      goTo: (item) => (isActivity(item) ? this.goTo(item) : this.goToWbs(item)),
+      onEdit: (c) => void this.editComment(c),
+      onDelete: (c) => this.deleteComment(c),
+      onToggleDone: (c) => void this.toggleDone(c),
+      onAddGeneral: () => void this.addComment(null),
+      onImport: () => this.importInput.click(),
+    });
+    const cmRow = el("div", "brow", [this.commentsPanel.root]);
+
     const tabs: [BottomTab, string, HTMLElement][] = [
       ["relationships", "Relationships", relRow],
       ["resources", "Resource Usage", resRow],
+      ["comments", "Comments", cmRow],
     ];
     const tabStrip = el("div", "btabs");
     for (const [id, label, body] of tabs) {
       if (id === "resources" && !FEATURES.resourceHistogram) continue;
+      if (id === "comments" && !FEATURES.comments) continue;
       const tab = el("div", "btab", [label]);
       tab.dataset.tab = id;
       tab.addEventListener("mousedown", () => this.setBottomTab(id));
       tabStrip.append(tab);
       body.dataset.tab = id;
+      if (id === "comments") this.commentsTab = tab;
     }
 
-    this.bottom = el("div", "bottom", [tabStrip, relRow, resRow]);
+    this.bottom = el("div", "bottom", [tabStrip, relRow, resRow, cmRow]);
     this.bottomSplit = splitter("h", () => (this.dragStart = this.bottom.getBoundingClientRect().height), (d) => {
       this.bottom.style.height = `${Math.max(60, Math.min(this.workspace.clientHeight - 120, this.dragStart - d))}px`;
     });
@@ -243,12 +294,23 @@ export class App {
     this.welcome = this.buildWelcome();
     this.fileInput = el("input");
     this.fileInput.type = "file";
-    this.fileInput.accept = ".xer";
+    this.fileInput.accept = ".xer,.html,.htm";
     this.fileInput.className = "hidden";
     this.fileInput.addEventListener("change", () => {
       const f = this.fileInput.files?.[0];
       if (f) void this.openFile(f);
       this.fileInput.value = "";
+    });
+    // Review > Import Comments: several reviewers' saved files at once.
+    this.importInput = el("input");
+    this.importInput.type = "file";
+    this.importInput.accept = ".html,.htm";
+    this.importInput.multiple = true;
+    this.importInput.className = "hidden";
+    this.importInput.addEventListener("change", () => {
+      const files = [...(this.importInput.files ?? [])];
+      this.importInput.value = "";
+      if (files.length) void this.importComments(files);
     });
 
     this.appRoot = mount;
@@ -265,10 +327,17 @@ export class App {
       this.welcome,
       el("div", "statusbar", [this.status, this.statusRight]),
       this.fileInput,
+      this.importInput,
     );
     this.applyPanelVisibility();
     this.installKeys();
     this.installDrop();
+    // Comments only persist when saved into the HTML file: warn before they're lost.
+    window.addEventListener("beforeunload", (e) => {
+      if (!this.commentsDirty) return;
+      e.preventDefault();
+      e.returnValue = ""; // older browsers need this to show the prompt
+    });
     this.setStatus("Ready");
   }
 
@@ -276,11 +345,30 @@ export class App {
 
   // ---------- Loading ----------
 
+  /**
+   * A .xer opens as the schedule (keeping any comments, which match by Activity ID).
+   * A saved review .html opens its schedule and comments, or, if a schedule is already
+   * open, just merges its comments in.
+   */
   async openFile(file: File): Promise<void> {
-    await this.load(file.name, new Uint8Array(await file.arrayBuffer()));
+    if (!/\.html?$/i.test(file.name)) {
+      await this.load(file.name, new Uint8Array(await file.arrayBuffer()));
+      return;
+    }
+    if (this.schedule) {
+      await this.importComments([file]);
+      return;
+    }
+    const text = await file.text();
+    const embedded = await extractEmbeddedXer(text).catch(() => null);
+    if (!embedded) {
+      modal("Can't open file", `<p><b>${esc(file.name)}</b></p><p>This HTML file doesn't contain a schedule. Open a .xer, or a file saved with <b>File &gt; Save Viewer with Schedule</b>.</p>`);
+      return;
+    }
+    await this.load(embedded.name, embedded.bytes, extractCommentsFromHtml(text));
   }
 
-  async load(name: string, bytes: Uint8Array): Promise<void> {
+  async load(name: string, bytes: Uint8Array, comments: ReviewComment[] = []): Promise<void> {
     const overlay = el("div", "overlay", [el("div", "box", [`Opening ${name}…`])]);
     document.body.append(overlay);
     await new Promise((r) => setTimeout(r, 30)); // let the overlay paint before the parse blocks
@@ -304,6 +392,7 @@ export class App {
       this.view.expanded = expandedToLevel(schedule, FEATURES.defaultExpandLevel);
       this.view.columns = new Map(scheduleColumns(schedule).map((c) => [c.key, c]));
       this.updateRelLines();
+      const recovered = this.loadComments(comments);
       this.welcome.classList.add("hidden");
       this.workspace.classList.remove("hidden");
       this.applyPanelVisibility();
@@ -320,7 +409,12 @@ export class App {
       this.gantt.scrollTop = 0;
       this.showRelations(null);
       this.updateTitle();
-      this.setStatus(`Opened ${name} in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+      const open = liveComments(this.comments).filter((c) => c.status === "open").length;
+      this.setStatus(
+        `Opened ${name} in ${((performance.now() - t0) / 1000).toFixed(1)} s` +
+          (open ? `. ${open} open review comment${open === 1 ? "" : "s"} (Review > Show Comments).` : "") +
+          (recovered ? ` Recovered ${recovered} unsaved comment change${recovered === 1 ? "" : "s"} from your last session.` : ""),
+      );
     } catch (e) {
       const msg = e instanceof XerParseError ? e.message : `Could not read this file: ${(e as Error).message}`;
       modal("Can't open file", `<p><b>${esc(name)}</b></p><p>${esc(msg)}</p>`);
@@ -596,8 +690,10 @@ export class App {
 
   private helpMenu(): MenuItem[] {
     return [
-      { label: "Keyboard Shortcuts", action: () => this.showShortcuts() },
-      { label: "About XER Viewer", action: () => this.showAbout() },
+      { label: "User Guide", key: "F1", action: () => showUserGuide() },
+      { label: "Keyboard Shortcuts", action: () => showShortcuts() },
+      "-",
+      { label: "About XER Viewer", action: () => showAbout() },
     ];
   }
 
@@ -620,6 +716,214 @@ export class App {
     });
   }
 
+  // ---------- Review comments ----------
+
+  private reviewMenu(): MenuItem[] {
+    const loaded = () => this.schedule !== null;
+    const sel = this.selected;
+    const onSel = sel ? (isActivity(sel) ? sel.code : `WBS ${sel.code}`) : "";
+    return [
+      { label: sel ? `Add Comment on ${onSel}...` : "Add Comment...", key: "Ctrl+M", enabled: () => loaded() && !!this.selected, action: () => void this.addComment(this.selected) },
+      { label: "Add General Comment...", enabled: loaded, action: () => void this.addComment(null) },
+      "-",
+      { label: "Show Comments", enabled: loaded, action: () => this.showCommentsTab() },
+      { label: "Import Reviewers' Files...", enabled: loaded, action: () => this.importInput.click() },
+      "-",
+      { label: `Your Name${this.prefs.reviewer ? `: ${this.prefs.reviewer}` : ""}...`, action: () => void this.ensureReviewer(true) },
+    ];
+  }
+
+  private rowMenu(i: number, x: number, y: number): void {
+    if (!FEATURES.comments) return;
+    const row = this.rows[i];
+    if (!row) return;
+    const item = row.kind === "wbs" ? row.wbs : row.act;
+    const counts = this.commentIndex.get(rowKey(row));
+    const items: MenuItem[] = [{ label: "Add Comment...", key: "Ctrl+M", action: () => void this.addComment(item) }];
+    if (counts) items.push({ label: `Show Comments (${counts[0] + counts[1]})`, action: () => this.showCommentsTab() });
+    if (row.kind === "wbs") {
+      items.push("-", { label: this.view.expanded.has(row.wbs.id) ? "Collapse" : "Expand", action: () => this.toggle(i) });
+    }
+    popupMenu(items, x, y);
+  }
+
+  /** Asks for the reviewer's name if we don't have one (or `force`). Returns it, or null if cancelled. */
+  private async ensureReviewer(force = false): Promise<string | null> {
+    if (this.prefs.reviewer && !force) return this.prefs.reviewer;
+    const name = await askReviewerName(this.prefs.reviewer);
+    if (name) {
+      this.prefs.reviewer = name;
+      this.savePrefs();
+    }
+    return name ?? (force ? this.prefs.reviewer || null : null);
+  }
+
+  /** Adds a comment on an activity or WBS band, or a general one when `item` is null. */
+  private async addComment(item: Activity | Wbs | null): Promise<void> {
+    if (!this.schedule) return;
+    const author = await this.ensureReviewer();
+    if (!author) return;
+    const target = item ? targetFor(item) : ({ kind: "general" } as const);
+    const about = item ? (isActivity(item) ? `${item.code} – ${item.name}` : `WBS ${item.fullCode} – ${item.name}`) : "General comment on the schedule";
+    const draft = await editCommentDialog(about, author);
+    if (!draft) return;
+    const now = Date.now();
+    this.comments.push({
+      id: newCommentId(),
+      target,
+      type: draft.type,
+      text: draft.text,
+      author,
+      created: now,
+      updated: now,
+      status: "open",
+      snapshot: item ? snapshotOf(item) : undefined,
+    });
+    this.commentsChanged(`Comment added on ${item ? describeTarget(this.comments[this.comments.length - 1], item) : "the schedule"}.`);
+  }
+
+  private async editComment(c: ReviewComment): Promise<void> {
+    const draft = await editCommentDialog(describeTarget(c, null), c.author, { type: c.type, text: c.text });
+    if (!draft) return;
+    this.replaceComment({ ...c, ...draft, updated: Date.now() });
+    this.commentsChanged("Comment updated.");
+  }
+
+  private deleteComment(c: ReviewComment): void {
+    const preview = c.text.length > 80 ? c.text.slice(0, 80) + "…" : c.text;
+    if (!window.confirm(`Delete this comment by ${c.author}?\n\n"${preview}"`)) return;
+    this.replaceComment({ ...c, deleted: true, updated: Date.now() });
+    this.commentsChanged("Comment deleted.");
+  }
+
+  private async toggleDone(c: ReviewComment): Promise<void> {
+    if (c.status === "done") {
+      this.replaceComment({ ...c, status: "open", doneBy: undefined, doneAt: undefined, updated: Date.now() });
+      this.commentsChanged("Comment reopened.");
+      return;
+    }
+    const by = await this.ensureReviewer();
+    if (!by) {
+      this.commentsPanel.render(); // undo the checkbox tick
+      return;
+    }
+    const now = Date.now();
+    this.replaceComment({ ...c, status: "done", doneBy: by, doneAt: now, updated: now });
+    this.commentsChanged("Comment marked done.");
+  }
+
+  private replaceComment(c: ReviewComment): void {
+    this.comments = this.comments.map((x) => (x.id === c.id ? c : x));
+  }
+
+  /** Merges comments from saved review files (several reviewers at once). */
+  private async importComments(files: File[]): Promise<void> {
+    if (!this.schedule) return;
+    let added = 0;
+    let updated = 0;
+    const empty: string[] = [];
+    for (const f of files) {
+      const found = extractCommentsFromHtml(await f.text());
+      if (!found.length) {
+        empty.push(f.name);
+        continue;
+      }
+      const r = mergeComments(this.comments, found);
+      this.comments = r.comments;
+      added += r.added;
+      updated += r.updated;
+    }
+    const parts = [`Imported from ${files.length - empty.length} file${files.length - empty.length === 1 ? "" : "s"}: ${added} new comment${added === 1 ? "" : "s"}, ${updated} updated.`];
+    if (empty.length) parts.push(`No comments in: ${empty.join(", ")}.`);
+    if (added || updated) this.commentsChanged(parts.join(" "));
+    else this.setStatus(parts.join(" "));
+    this.showCommentsTab();
+  }
+
+  /**
+   * Comments for a newly opened schedule: keep the current ones (they match by Activity
+   * ID), add any from the file, and recover unsaved work from the last session.
+   * Returns how many changes were recovered.
+   */
+  private loadComments(fromFile: ReviewComment[]): number {
+    this.comments = mergeComments(this.comments, fromFile).comments;
+    let recovered = 0;
+    const key = this.draftKey();
+    if (key) {
+      try {
+        const draft = parseComments(localStorage.getItem(key) ?? "");
+        const r = mergeComments(this.comments, draft);
+        this.comments = r.comments;
+        recovered = r.added + r.updated;
+      } catch {
+        // Storage blocked; nothing to recover.
+      }
+    }
+    this.commentsDirty = recovered > 0;
+    this.reindexComments();
+    return recovered;
+  }
+
+  private draftKey(): string | null {
+    const p = this.schedule?.projects[0];
+    return p ? DRAFT_KEY + p.shortName : null;
+  }
+
+  /** After any change: mark unsaved, back up, and refresh badges, panel and filters. */
+  private commentsChanged(message: string): void {
+    this.commentsDirty = true;
+    const key = this.draftKey();
+    if (key) {
+      try {
+        localStorage.setItem(key, JSON.stringify({ format: "xer-viewer-comments", version: 1, comments: this.comments }));
+      } catch {
+        // Storage blocked; the unsaved-changes warning still protects the work.
+      }
+    }
+    this.reindexComments();
+    if (this.filterState.commentedOnly) this.applyFilter();
+    else this.grid.render();
+    this.setStatus(`${message} Save with File > Save Viewer with Schedule (Ctrl+S) to keep it.`);
+  }
+
+  private reindexComments(): void {
+    this.commentIndex.clear();
+    for (const c of liveComments(this.comments)) {
+      const key = targetKey(c.target);
+      const counts = this.commentIndex.get(key) ?? [0, 0];
+      counts[c.status === "open" ? 0 : 1]++;
+      this.commentIndex.set(key, counts);
+    }
+    const live = liveComments(this.comments);
+    const open = live.filter((c) => c.status === "open").length;
+    if (this.commentsTab) {
+      this.commentsTab.textContent = `Comments${live.length ? ` (${open} open)` : ""}${this.commentsDirty ? " *" : ""}`;
+      this.commentsTab.title = this.commentsDirty ? "Comments not saved yet: File > Save Viewer with Schedule" : "";
+    }
+    this.commentsPanel.render();
+  }
+
+  private showCommentsTab(): void {
+    if (!this.prefs.showRelations) {
+      this.prefs.showRelations = true;
+      this.applyPanelVisibility();
+    }
+    this.setBottomTab("comments");
+  }
+
+  /** Selects a WBS band, expanding its parents. */
+  private goToWbs(w: Wbs): void {
+    for (let p = w.parent; p; p = p.parent) this.view.expanded.add(p.id);
+    this.rebuild();
+    const i = this.rowIndex.get(w);
+    if (i === undefined) {
+      this.setStatus(`WBS ${w.fullCode} is hidden by the current filter.`);
+      return;
+    }
+    this.grid.scrollToIndex(i, true);
+    this.select(i);
+  }
+
   // ---------- Filters ----------
 
   /** Recompiles the filter, re-totals WBS rows from what passes, and redraws. */
@@ -627,7 +931,9 @@ export class App {
     clearTimeout(this.filterTimer);
     const s = this.schedule;
     if (!s) return;
-    this.compiled = compileFilter(this.filterState, this.view.columns, this.view.ctx);
+    this.compiled = compileFilter(this.filterState, this.view.columns, this.view.ctx, (a) =>
+      this.commentIndex.has(`activity|${a.code}`),
+    );
     const base = this.compiled.test;
     const byResource = this.resourceTabShown() ? this.resources.activityFilter() : null;
     const test = base && byResource ? (a: Activity) => base(a) && byResource(a) : base ?? byResource;
@@ -654,7 +960,9 @@ export class App {
   }
 
   private applyBottomTab(): void {
-    const tab = FEATURES.resourceHistogram ? this.prefs.bottomTab : "relationships";
+    const t = this.prefs.bottomTab;
+    const tab =
+      (t === "resources" && !FEATURES.resourceHistogram) || (t === "comments" && !FEATURES.comments) ? "relationships" : t;
     for (const n of this.bottom.querySelectorAll<HTMLElement>("[data-tab]")) {
       if (n.classList.contains("btab")) n.classList.toggle("active", n.dataset.tab === tab);
       else n.classList.toggle("hidden", n.dataset.tab !== tab);
@@ -663,6 +971,7 @@ export class App {
       this.syncResourceListWidth();
       this.resources.draw();
     }
+    if (tab === "comments") this.commentsPanel.render();
   }
 
   /** The resource list matches the grid's width so the histogram lines up under the Gantt. */
@@ -709,32 +1018,26 @@ export class App {
       modal("Not available in dev mode", "<p>Run <code>npm run build</code> and use <code>dist/xer-viewer.html</code> to save a viewer with the schedule inside.</p>");
       return;
     }
-    const html = await buildEmbeddedHtml({ name: this.fileName, bytes: this.fileBytes });
+    const html = await buildEmbeddedHtml({ name: this.fileName, bytes: this.fileBytes }, this.comments);
+    // A reviewer's copy is named after them, so files coming back don't overwrite each other.
     const base = this.fileName.replace(/\.xer$/i, "");
-    downloadText(`${base}.html`, html, "text/html");
-    this.setStatus(`Saved ${base}.html (${(html.length / 1_048_576).toFixed(1)} MB). Send that one file: it opens straight to this schedule.`);
-  }
-
-  private showShortcuts(): void {
-    const rows = [
-      ["Ctrl+O", "Open a .xer file"],
-      ["Ctrl+S", "Save viewer with schedule"],
-      ["Ctrl+F", "Find activity by ID or name"],
-      ["F3 / Shift+F3", "Find next / previous"],
-      ["↑ ↓ PgUp PgDn Home End", "Move selection"],
-      ["→ / ←", "Expand / collapse WBS (← on an activity jumps to its WBS)"],
-      ["Enter or double-click", "Expand / collapse WBS"],
-      ["Double-click a relationship", "Go to that activity"],
-      ["Ctrl+Mouse wheel on Gantt", "Zoom timescale"],
-    ];
-    modal("Keyboard Shortcuts", `<table>${rows.map(([k, v]) => `<tr><td><b>${k}</b></td><td>${v}</td></tr>`).join("")}</table>`);
-  }
-
-  private showAbout(): void {
-    modal(
-      "About XER Viewer",
-      `<p><b>XER Viewer</b>: a read-only viewer for Primavera P6 .xer files.</p>
-       <p>Your file is read inside this browser window. Nothing is uploaded or sent anywhere.</p>`,
+    const mine = liveComments(this.comments).some((c) => c.author === this.prefs.reviewer);
+    const who = mine && this.prefs.reviewer ? ` - comments ${this.prefs.reviewer.replace(/[\\/:*?"<>|]+/g, "")}` : "";
+    const fileName = `${base}${who}.html`;
+    downloadText(fileName, html, "text/html");
+    this.commentsDirty = false;
+    try {
+      const key = this.draftKey();
+      if (key) localStorage.removeItem(key);
+    } catch {
+      // Nothing to clear.
+    }
+    this.reindexComments();
+    const n = liveComments(this.comments).length;
+    this.setStatus(
+      `Saved ${fileName} (${(html.length / 1_048_576).toFixed(1)} MB)` +
+        (n ? ` with ${n} comment${n === 1 ? "" : "s"}` : "") +
+        `. Send that one file: it opens straight to this schedule.`,
     );
   }
 
@@ -744,12 +1047,18 @@ export class App {
     window.addEventListener("keydown", (e) => {
       const ctrl = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
-      if (ctrl && k === "o") {
+      if (e.key === "F1") {
+        e.preventDefault(); // instead of the browser's own help page
+        if (!document.querySelector(".modal-back")) showUserGuide();
+      } else if (ctrl && k === "o") {
         e.preventDefault();
         this.fileInput.click();
       } else if (ctrl && k === "s" && FEATURES.embedSave && this.schedule) {
         e.preventDefault();
         void this.saveEmbedded();
+      } else if (ctrl && k === "m" && FEATURES.comments && this.schedule && this.selected) {
+        e.preventDefault();
+        void this.addComment(this.selected);
       } else if (ctrl && e.shiftKey && k === "f" && FEATURES.filters && this.schedule) {
         e.preventDefault();
         this.toggleFilters();
@@ -775,7 +1084,10 @@ export class App {
       if (!e.dataTransfer?.types.includes("Files")) return;
       depth++;
       if (!overlay) {
-        overlay = el("div", "overlay drop", [el("div", "box", ["Drop the .xer file to open it"])]);
+        const what = this.schedule
+          ? "Drop a .xer to open it, or reviewers' saved .html files to add their comments"
+          : "Drop a .xer, or a saved viewer .html, to open it";
+        overlay = el("div", "overlay drop", [el("div", "box", [what])]);
         document.body.append(overlay);
       }
     });
@@ -786,14 +1098,23 @@ export class App {
     window.addEventListener("drop", (e) => {
       e.preventDefault();
       hide();
-      const f = e.dataTransfer?.files[0];
-      if (f) void this.openFile(f);
+      const files = [...(e.dataTransfer?.files ?? [])];
+      const html = files.filter((f) => /\.html?$/i.test(f.name));
+      // Several reviewers' files dropped onto an open schedule: import all their comments.
+      if (this.schedule && html.length > 1) void this.importComments(html);
+      else if (files[0]) void this.openFile(files[0]);
     });
   }
 
   private buildWelcome(): HTMLElement {
     const open = el("button", "btn primary", ["Open .xer file..."]);
     open.addEventListener("click", () => this.fileInput.click());
+    const guide = el("a", "welcome-help", ["How to use it (F1)"]);
+    guide.href = "#";
+    guide.addEventListener("click", (e) => {
+      e.preventDefault();
+      showUserGuide();
+    });
     return el("div", "welcome", [
       el("div", "card", [
         el("h1", "", ["XER Viewer"]),
@@ -801,6 +1122,7 @@ export class App {
         open,
         el("p", "", ["or drag and drop a .xer file anywhere on this window"]),
         el("p", "note", ["Your file stays on this computer. Nothing is uploaded."]),
+        guide,
       ]),
     ]);
   }

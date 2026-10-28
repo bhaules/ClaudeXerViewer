@@ -14,6 +14,28 @@ nothing to install. The schedule is read inside the browser and never uploaded.
 You can also send `xer-viewer.html` together with a `.xer` file and let people
 open the `.xer` themselves.
 
+## Getting review comments back
+
+1. Send the saved `.html` (above) to your reviewers.
+2. They open it, enter their name once, then **right-click an activity or WBS band >
+   Add Comment** (or select a row and press Ctrl+M). Comments can be a Comment,
+   Question, Change request or Error. **Review > Add General Comment** is for the
+   schedule as a whole. Rows with comments get an orange marker.
+3. They save with **File > Save Viewer with Schedule** (Ctrl+S), which names the file
+   after them (e.g. `Project - comments Jane Smith.html`), and send it back.
+4. You open your copy and drop all the returned files on it at once (or use
+   **Review > Import Reviewers' Files**). The **Comments** tab lists everything: click
+   a comment to jump to its activity, tick **Done** as you make the change in P6, and
+   filter by status or reviewer. The **Status** column is filled in automatically:
+   "Moved since" when an activity's dates have changed since the comment was written,
+   "Not in this schedule" when the activity was deleted or renumbered, or who marked
+   it done. **Filter > With comments** shows only the activities that have them.
+
+Comments are never written into the `.xer` and nothing is imported into P6: you make
+the changes in P6 yourself. If someone closes the window without saving, the browser
+warns them, and their unsaved comments come back the next time they open the schedule
+in the same browser.
+
 ## Using it
 
 - **WBS**: double-click a band or click its arrow to expand/collapse.

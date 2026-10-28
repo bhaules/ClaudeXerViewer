@@ -1,4 +1,4 @@
-import { capturePristineHtml, readEmbedded } from "./embed";
+import { capturePristineHtml, readEmbedded, readEmbeddedComments } from "./embed";
 import "./styles.css";
 import { App } from "./ui/app";
 
@@ -10,7 +10,7 @@ const app = new App(document.getElementById("app")!);
 async function start(): Promise<void> {
   const embedded = await readEmbedded();
   if (embedded) {
-    await app.load(embedded.name, embedded.bytes);
+    await app.load(embedded.name, embedded.bytes, readEmbeddedComments());
     return;
   }
   // Dev convenience: /?file=/tests/fixtures/sample.xer

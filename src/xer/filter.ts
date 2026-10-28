@@ -16,10 +16,20 @@ export interface FilterState {
   to: number | null;
   /** Column key -> expression typed in the filter row. */
   columns: Map<string, string>;
+  /** Only activities with review comments. */
+  commentedOnly: boolean;
 }
 
 export function emptyFilter(): FilterState {
-  return { statuses: new Set(), criticalOnly: false, milestonesOnly: false, from: null, to: null, columns: new Map() };
+  return {
+    statuses: new Set(),
+    criticalOnly: false,
+    milestonesOnly: false,
+    from: null,
+    to: null,
+    columns: new Map(),
+    commentedOnly: false,
+  };
 }
 
 export function filterActive(f: FilterState): boolean {
@@ -27,6 +37,7 @@ export function filterActive(f: FilterState): boolean {
     f.statuses.size > 0 ||
     f.criticalOnly ||
     f.milestonesOnly ||
+    f.commentedOnly ||
     f.from !== null ||
     f.to !== null ||
     [...f.columns.values()].some((v) => v.trim() !== "")
@@ -42,13 +53,20 @@ export interface CompiledFilter {
 
 const DAY = 86_400_000;
 
-export function compileFilter(f: FilterState, columns: Map<string, Column>, ctx: ColumnContext): CompiledFilter {
+export function compileFilter(
+  f: FilterState,
+  columns: Map<string, Column>,
+  ctx: ColumnContext,
+  /** Which activities have review comments (for `commentedOnly`). */
+  hasComment: Predicate = () => false,
+): CompiledFilter {
   const tests: Predicate[] = [];
   const errors = new Set<string>();
 
   if (f.statuses.size) tests.push((a) => f.statuses.has(a.status));
   if (f.criticalOnly) tests.push((a) => a.critical);
   if (f.milestonesOnly) tests.push((a) => isMilestone(a.type));
+  if (f.commentedOnly) tests.push(hasComment);
   if (f.from !== null || f.to !== null) {
     const from = f.from ?? -Infinity;
     const toEnd = f.to === null ? Infinity : f.to + DAY; // `to` includes its whole day

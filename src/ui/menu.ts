@@ -12,6 +12,51 @@ export type MenuItem =
       items?: () => MenuItem[];
     };
 
+/** A one-level right-click menu at (x, y). Closes on click, Escape or clicking elsewhere. */
+export function popupMenu(items: MenuItem[], x: number, y: number): void {
+  document.querySelector(".menu.popup")?.remove();
+  const menu = el("div", "menu popup");
+  const close = () => {
+    menu.remove();
+    window.removeEventListener("mousedown", outside, true);
+    window.removeEventListener("keydown", esc_, true);
+    window.removeEventListener("blur", close);
+  };
+  const outside = (e: MouseEvent) => {
+    if (!menu.contains(e.target as Node)) close();
+  };
+  const esc_ = (e: KeyboardEvent) => {
+    if (e.key === "Escape") close();
+  };
+  for (const item of items) {
+    if (item === "-") {
+      menu.append(el("div", "sep"));
+      continue;
+    }
+    const enabled = item.enabled ? item.enabled() : true;
+    const row = el("div", `mi${enabled ? "" : " disabled"}`);
+    row.innerHTML =
+      `<span class="chk">${item.checked?.() ? "✓" : ""}</span><span>${esc(item.label)}</span>` +
+      `<span class="key">${esc(item.key ?? "")}</span><span class="sub"></span>`;
+    row.addEventListener("mouseup", () => {
+      if (!enabled) return;
+      close();
+      item.action?.();
+    });
+    menu.append(row);
+  }
+  document.body.append(menu);
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - r.width - 2))}px`;
+  menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - r.height - 2))}px`;
+  // Listen after this event finishes, so the right-click that opened it doesn't close it.
+  setTimeout(() => {
+    window.addEventListener("mousedown", outside, true);
+    window.addEventListener("keydown", esc_, true);
+    window.addEventListener("blur", close);
+  });
+}
+
 export interface TopMenu {
   label: string;
   items: () => MenuItem[];
