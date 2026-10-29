@@ -41,9 +41,15 @@ describe.skipIf(files.length === 0)("real XER files", () => {
         expect(all("actual") + unplaced).toBeCloseTo(r.actual, 0);
       }
 
+      // Every activity code assignment lands on an activity.
+      const codeCells = s.activities.reduce((n, a) => n + a.codes.size, 0);
+      expect(codeCells).toBe(countRows(text, "TASKACTV"));
+      expect(new Set(s.codeTypes.map((t) => t.label)).size).toBe(s.codeTypes.length); // no duplicate column names
+
       console.log(
         `${f}: ${s.activities.length} activities, ${s.relationships.length} relationships, ${ms.toFixed(0)} ms; ` +
-          `${s.resources.length} resources, usage profile ${usageMs.toFixed(0)} ms`,
+          `${s.resources.length} resources, usage profile ${usageMs.toFixed(0)} ms; ` +
+          `${s.codeTypes.length} code types, ${codeCells} code values`,
       );
     });
   }

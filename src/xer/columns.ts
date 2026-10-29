@@ -1,5 +1,14 @@
 // Column definitions for the activity grid: what each column shows and how it sorts.
-import { FALLBACK_CAL, UDF_NUMBER_TYPES, type Activity, type LaborUnits, type Schedule, type UdfType, type Wbs } from "./model";
+import {
+  FALLBACK_CAL,
+  UDF_NUMBER_TYPES,
+  type Activity,
+  type ActivityCodeType,
+  type LaborUnits,
+  type Schedule,
+  type UdfType,
+  type Wbs,
+} from "./model";
 import {
   activityTypeName,
   constraintName,
@@ -18,7 +27,7 @@ export interface ColumnContext {
 export type SortValue = number | string | null;
 
 /** Groups shown in the Columns dialog, in this order (like P6's Available Options). */
-export const COLUMN_GROUPS = ["General", "Dates", "Durations", "Percent Complete", "Units", "User Defined Fields"] as const;
+export const COLUMN_GROUPS = ["General", "Activity Codes", "Dates", "Durations", "Percent Complete", "Units", "User Defined Fields"] as const;
 export type ColumnGroup = (typeof COLUMN_GROUPS)[number];
 
 export interface Column {
@@ -107,8 +116,13 @@ const dateColumn = (
   sortValue: (a) => pick(a),
 });
 
-/** Labor units are hours of work; WBS rows show the sum of everything under them. */
-const unitsColumn = (key: string, label: string, pick: (l: LaborUnits) => number): Column => ({
+/** Labor and nonlabor units are hours; WBS rows show the sum of everything under them. */
+const unitsColumn = (
+  key: string,
+  label: string,
+  pick: (l: LaborUnits) => number,
+  which: "labor" | "nonlabor" = "labor",
+): Column => ({
   key,
   label,
   group: "Units",
@@ -116,9 +130,9 @@ const unitsColumn = (key: string, label: string, pick: (l: LaborUnits) => number
   width: 90,
   align: "right",
   defaultVisible: false,
-  text: (a) => formatNumber(pick(a.labor)) + "h",
-  wbsText: (w) => formatNumber(pick(w.labor)) + "h",
-  sortValue: (a) => pick(a.labor),
+  text: (a) => formatNumber(pick(a[which])) + "h",
+  wbsText: (w) => formatNumber(pick(w[which])) + "h",
+  sortValue: (a) => pick(a[which]),
 });
 
 const generalColumn = (
@@ -190,10 +204,76 @@ export const COLUMNS: Column[] = [
   dateColumn("lateStart", "Late Start", (a) => a.lateStart, null, null, false),
   dateColumn("lateFinish", "Late Finish", (a) => a.lateFinish, null, null, false),
   generalColumn("constraint", "Primary Constraint", 130, (a) => constraintName(a.constraint)),
+  dateColumn("constraintDate", "Primary Constraint Date", (a) => a.constraintDate, null, null, false),
+  generalColumn("constraint2", "Secondary Constraint", 130, (a) => constraintName(a.constraint2)),
+  dateColumn("constraint2Date", "Secondary Constraint Date", (a) => a.constraint2Date, null, null, false),
+  dateColumn("actualStart", "Actual Start", (a) => a.actualStart, null, null, false),
+  dateColumn("actualFinish", "Actual Finish", (a) => a.actualFinish, null, null, false),
+  dateColumn("expectedFinish", "Expected Finish", (a) => a.expectedFinish, null, null, false),
+  generalColumn("durationType", "Duration Type", 170, (a) => durationTypeName(a.durationType)),
+  generalColumn("pctType", "Percent Complete Type", 110, (a) => pctTypeName(a.pctCompleteType)),
+  {
+    key: "physPct",
+    label: "Physical % Complete",
+    group: "Percent Complete",
+    kind: "number",
+    width: 80,
+    align: "right",
+    defaultVisible: false,
+    text: (a) => (a.physPctComplete === null ? "" : formatPercent(a.physPctComplete)),
+    wbsText: () => "",
+    sortValue: (a) => a.physPctComplete,
+  },
+  generalColumn("primaryResource", "Primary Resource", 150, (a) => a.primaryResource),
+  generalColumn("wbsCode", "WBS Code", 180, (a) => a.wbs.fullCode, false, (w) => w.fullCode),
+  generalColumn("wbsName", "WBS Name", 220, (a) => a.wbs.name, false, (w) => w.name),
+  generalColumn("project", "Project", 130, (a) => a.project?.shortName ?? "", false, (w) => w.project?.shortName ?? ""),
   unitsColumn("budLabor", "Budgeted Labor Units", (l) => l.budget),
   unitsColumn("actLabor", "Actual Labor Units", (l) => l.actual),
   unitsColumn("remLabor", "Remaining Labor Units", (l) => l.remaining),
+  unitsColumn("budNonlabor", "Budgeted Nonlabor Units", (l) => l.budget, "nonlabor"),
+  unitsColumn("actNonlabor", "Actual Nonlabor Units", (l) => l.actual, "nonlabor"),
+  unitsColumn("remNonlabor", "Remaining Nonlabor Units", (l) => l.remaining, "nonlabor"),
 ];
+
+const DURATION_TYPES: Record<string, string> = {
+  DT_FixedDUR2: "Fixed Duration and Units",
+  DT_FixedDrtn: "Fixed Duration and Units/Time",
+  DT_FixedQty: "Fixed Units",
+  DT_FixedRate: "Fixed Units/Time",
+};
+const durationTypeName = (t: string) => DURATION_TYPES[t] ?? t;
+
+const PCT_TYPES: Record<string, string> = { CP_Drtn: "Duration", CP_Phys: "Physical", CP_Units: "Units" };
+const pctTypeName = (t: string) => PCT_TYPES[t] ?? t;
+
+/** Code column keys use the code type's name, so a saved layout carries over between files. */
+export function codeColumnKey(t: ActivityCodeType, description = false): string {
+  return `${description ? "codedesc" : "code"}:${t.label}`;
+}
+
+/** Two columns per code type, like P6: the code value ("ME") and its description ("Mechanical"). */
+function codeColumns(t: ActivityCodeType): Column[] {
+  const make = (description: boolean): Column => {
+    const pick = (a: Activity) => {
+      const c = a.codes.get(t.id);
+      return c ? (description ? c.description : c.value) : "";
+    };
+    return {
+      key: codeColumnKey(t, description),
+      label: description ? `${t.label} (Description)` : t.label,
+      group: "Activity Codes",
+      kind: "text",
+      width: description ? 180 : 100,
+      align: "left",
+      defaultVisible: false,
+      text: pick,
+      wbsText: () => "",
+      sortValue: pick,
+    };
+  };
+  return [make(false), make(true)];
+}
 
 export const COLUMN_BY_KEY = new Map(COLUMNS.map((c) => [c.key, c]));
 
@@ -238,5 +318,5 @@ function udfColumn(t: UdfType): Column {
 
 /** Every column available for this schedule: the fixed ones plus one per activity UDF. */
 export function scheduleColumns(s: Schedule | null): Column[] {
-  return s ? [...COLUMNS, ...s.udfTypes.map(udfColumn)] : COLUMNS;
+  return s ? [...COLUMNS, ...s.codeTypes.flatMap(codeColumns), ...s.udfTypes.map(udfColumn)] : COLUMNS;
 }

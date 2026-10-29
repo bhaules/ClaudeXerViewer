@@ -29,6 +29,14 @@ const LABOR = {
   1005: { target_work_qty: "100.5", act_work_qty: "0", remain_work_qty: "100.5" },
 };
 
+// Less common TASK fields shown as extra columns.
+const EXTRA = {
+  1002: { duration_type: "DT_FixedDUR2", rsrc_id: "51", expect_end_date: "2025-02-20 16:00" },
+  1003: { duration_type: "DT_FixedDrtn", cstr_date: "2025-02-17 08:00", cstr_type2: "CS_MEOB", cstr_date2: "2025-02-21 16:30" },
+  1004: { duration_type: "DT_FixedQty", target_equip_qty: "40", act_equip_qty: "0", remain_equip_qty: "40" },
+  1005: { duration_type: "DT_FixedRate", target_equip_qty: "12", act_equip_qty: "1.5", remain_equip_qty: "10.5" },
+};
+
 const lines = [
   "ERMHDR\t21.12\t2025-02-03\tProject\tDEMO\tDemo User\tdbxDatabaseNoName\tProject Management\tAUST",
   ...table("UNKNOWNTABLE", ["foo"], [{ foo: "ignored" }]),
@@ -61,7 +69,7 @@ const lines = [
   ),
   ...table(
     "TASK",
-    ["task_id", "proj_id", "wbs_id", "clndr_id", "complete_pct_type", "phys_complete_pct", "task_type", "status_code", "task_code", "task_name", "total_float_hr_cnt", "free_float_hr_cnt", "remain_drtn_hr_cnt", "target_drtn_hr_cnt", "cstr_type", "act_start_date", "act_end_date", "late_start_date", "restart_date", "reend_date", "early_start_date", "early_end_date", "target_start_date", "target_end_date", "driving_path_flag", "target_work_qty", "act_work_qty", "remain_work_qty"],
+    ["task_id", "proj_id", "wbs_id", "clndr_id", "complete_pct_type", "phys_complete_pct", "task_type", "status_code", "task_code", "task_name", "total_float_hr_cnt", "free_float_hr_cnt", "remain_drtn_hr_cnt", "target_drtn_hr_cnt", "cstr_type", "act_start_date", "act_end_date", "late_start_date", "restart_date", "reend_date", "early_start_date", "early_end_date", "target_start_date", "target_end_date", "driving_path_flag", "target_work_qty", "act_work_qty", "remain_work_qty", "duration_type", "rsrc_id", "expect_end_date", "cstr_date", "cstr_type2", "cstr_date2", "target_equip_qty", "act_equip_qty", "remain_equip_qty"],
     [
       { task_id: "1001", proj_id: "100", wbs_id: "1", clndr_id: "10", complete_pct_type: "CP_Drtn", task_type: "TT_Mile", status_code: "TK_Complete", task_code: "A1000", task_name: "Project Start", remain_drtn_hr_cnt: "0", target_drtn_hr_cnt: "0", act_start_date: "2025-01-06 08:00", late_start_date: "1899-12-30 00:00", target_start_date: "2025-01-06 08:00" },
       { task_id: "1002", proj_id: "100", wbs_id: "2", clndr_id: "10", complete_pct_type: "CP_Drtn", task_type: "TT_Task", status_code: "TK_Active", task_code: "E1000", task_name: "Design \x96 Civil", total_float_hr_cnt: "40", remain_drtn_hr_cnt: "80", target_drtn_hr_cnt: "160", act_start_date: "2025-01-07 08:00", restart_date: "2025-02-03 08:00", reend_date: "2025-02-14 16:00", early_start_date: "2025-02-03 08:00", early_end_date: "2025-02-14 16:00", target_start_date: "2025-01-06 08:00", target_end_date: "2025-01-31 16:00" },
@@ -70,7 +78,47 @@ const lines = [
       { task_id: "1005", proj_id: "100", wbs_id: "3", clndr_id: "11", complete_pct_type: "CP_Drtn", task_type: "TT_Task", status_code: "TK_NotStart", task_code: "C1010", task_name: "Contractor\x92s Mobilisation", total_float_hr_cnt: "100", remain_drtn_hr_cnt: "50", target_drtn_hr_cnt: "50", early_start_date: "2025-02-24 07:00", early_end_date: "2025-02-28 17:00" },
       { task_id: "1006", proj_id: "100", wbs_id: "777", clndr_id: "99", complete_pct_type: "CP_Drtn", task_type: "TT_Task", status_code: "TK_NotStart", task_code: "Z9999", task_name: "Orphan activity", remain_drtn_hr_cnt: "8", target_drtn_hr_cnt: "8", early_start_date: "2025-02-03 08:00", early_end_date: "2025-02-03 16:00" },
       { task_id: "1007", proj_id: "100", wbs_id: "1", clndr_id: "10", complete_pct_type: "CP_Drtn", task_type: "TT_FinMile", status_code: "TK_NotStart", task_code: "F1000", task_name: "Project Finish", total_float_hr_cnt: "-10", remain_drtn_hr_cnt: "0", target_drtn_hr_cnt: "0", cstr_type: "CS_MEOB", early_start_date: "2025-03-13 08:00", early_end_date: "2025-03-13 08:00" },
-    ].map((r) => ({ ...r, ...LABOR[r.task_id] })),
+    ].map((r) => ({ ...r, ...LABOR[r.task_id], ...EXTRA[r.task_id] })),
+  ),
+  // Activity codes. "Phase" exists as both a Global and a Project code type; "Unused"
+  // has no assignments; D1 is a sub-code of DES. Ignored: an assignment to a missing
+  // activity and one to a missing code.
+  ...table(
+    "ACTVTYPE",
+    ["actv_code_type_id", "actv_short_len", "seq_num", "actv_code_type", "proj_id", "wbs_id", "actv_code_type_scope"],
+    [
+      { actv_code_type_id: "60", seq_num: "1", actv_code_type: "Discipline", proj_id: "100", actv_code_type_scope: "AS_Project" },
+      { actv_code_type_id: "61", seq_num: "2", actv_code_type: "Phase", actv_code_type_scope: "AS_Global" },
+      { actv_code_type_id: "62", seq_num: "3", actv_code_type: "Phase", proj_id: "100", actv_code_type_scope: "AS_Project" },
+      { actv_code_type_id: "63", seq_num: "0", actv_code_type: "Unused", proj_id: "100", actv_code_type_scope: "AS_Project" },
+    ],
+  ),
+  ...table(
+    "ACTVCODE",
+    ["actv_code_id", "parent_actv_code_id", "actv_code_type_id", "actv_code_name", "short_name", "seq_num"],
+    [
+      { actv_code_id: "600", actv_code_type_id: "60", actv_code_name: "Engineering", short_name: "ENG", seq_num: "1" },
+      { actv_code_id: "601", actv_code_type_id: "60", actv_code_name: "Civil works", short_name: "CIV", seq_num: "2" },
+      { actv_code_id: "610", actv_code_type_id: "61", actv_code_name: "Global phase 1", short_name: "P1", seq_num: "1" },
+      { actv_code_id: "620", actv_code_type_id: "62", actv_code_name: "Design phase", short_name: "DES", seq_num: "1" },
+      { actv_code_id: "621", parent_actv_code_id: "620", actv_code_type_id: "62", actv_code_name: "Detailed design", short_name: "D1", seq_num: "2" },
+      { actv_code_id: "630", actv_code_type_id: "63", actv_code_name: "Never used", short_name: "X", seq_num: "1" },
+    ],
+  ),
+  ...table(
+    "TASKACTV",
+    ["task_id", "actv_code_type_id", "actv_code_id", "proj_id"],
+    [
+      { task_id: "1002", actv_code_type_id: "60", actv_code_id: "600" },
+      { task_id: "1003", actv_code_type_id: "60", actv_code_id: "600" },
+      { task_id: "1004", actv_code_type_id: "60", actv_code_id: "601" },
+      { task_id: "1005", actv_code_type_id: "60", actv_code_id: "601" },
+      { task_id: "1002", actv_code_type_id: "61", actv_code_id: "610" },
+      { task_id: "1002", actv_code_type_id: "62", actv_code_id: "620" },
+      { task_id: "1003", actv_code_type_id: "62", actv_code_id: "621" },
+      { task_id: "9999", actv_code_type_id: "60", actv_code_id: "600" },
+      { task_id: "1004", actv_code_type_id: "62", actv_code_id: "999" },
+    ].map((r) => ({ proj_id: "100", ...r })),
   ),
   // Resources: UNUSED has no assignments so must not be listed.
   ...table(

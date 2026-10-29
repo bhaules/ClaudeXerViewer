@@ -20,14 +20,39 @@ ERMHDR	21.12	2025-02-03	Project	DEMO	Demo User	dbxDatabaseNoName	Project Managem
 %R	4	100	3	N	EMPTY	Empty WBS	1
 %R	5	100	1	N	CIV	Civil	3
 %T	TASK
-%F	task_id	proj_id	wbs_id	clndr_id	complete_pct_type	phys_complete_pct	task_type	status_code	task_code	task_name	total_float_hr_cnt	free_float_hr_cnt	remain_drtn_hr_cnt	target_drtn_hr_cnt	cstr_type	act_start_date	act_end_date	late_start_date	restart_date	reend_date	early_start_date	early_end_date	target_start_date	target_end_date	driving_path_flag	target_work_qty	act_work_qty	remain_work_qty
-%R	1001	100	1	10	CP_Drtn		TT_Mile	TK_Complete	A1000	Project Start			0	0		2025-01-06 08:00		1899-12-30 00:00					2025-01-06 08:00					
-%R	1002	100	2	10	CP_Drtn		TT_Task	TK_Active	E1000	Design – Civil	40		80	160		2025-01-07 08:00			2025-02-03 08:00	2025-02-14 16:00	2025-02-03 08:00	2025-02-14 16:00	2025-01-06 08:00	2025-01-31 16:00		160	80	80
-%R	1003	100	2	10	CP_Phys	0	TT_Task	TK_NotStart	E1010	Design Review	0		40	40	CS_MSOA						2025-02-17 08:00	2025-02-21 16:00						
-%R	1004	100	5	11	CP_Drtn		TT_Task	TK_NotStart	C1000	Excavation	-10		80	80							2025-03-03 07:00	2025-03-12 17:00				240	0	240
-%R	1005	100	3	11	CP_Drtn		TT_Task	TK_NotStart	C1010	Contractor’s Mobilisation	100		50	50							2025-02-24 07:00	2025-02-28 17:00				100.5	0	100.5
-%R	1006	100	777	99	CP_Drtn		TT_Task	TK_NotStart	Z9999	Orphan activity			8	8							2025-02-03 08:00	2025-02-03 16:00						
-%R	1007	100	1	10	CP_Drtn		TT_FinMile	TK_NotStart	F1000	Project Finish	-10		0	0	CS_MEOB						2025-03-13 08:00	2025-03-13 08:00						
+%F	task_id	proj_id	wbs_id	clndr_id	complete_pct_type	phys_complete_pct	task_type	status_code	task_code	task_name	total_float_hr_cnt	free_float_hr_cnt	remain_drtn_hr_cnt	target_drtn_hr_cnt	cstr_type	act_start_date	act_end_date	late_start_date	restart_date	reend_date	early_start_date	early_end_date	target_start_date	target_end_date	driving_path_flag	target_work_qty	act_work_qty	remain_work_qty	duration_type	rsrc_id	expect_end_date	cstr_date	cstr_type2	cstr_date2	target_equip_qty	act_equip_qty	remain_equip_qty
+%R	1001	100	1	10	CP_Drtn		TT_Mile	TK_Complete	A1000	Project Start			0	0		2025-01-06 08:00		1899-12-30 00:00					2025-01-06 08:00														
+%R	1002	100	2	10	CP_Drtn		TT_Task	TK_Active	E1000	Design – Civil	40		80	160		2025-01-07 08:00			2025-02-03 08:00	2025-02-14 16:00	2025-02-03 08:00	2025-02-14 16:00	2025-01-06 08:00	2025-01-31 16:00		160	80	80	DT_FixedDUR2	51	2025-02-20 16:00						
+%R	1003	100	2	10	CP_Phys	0	TT_Task	TK_NotStart	E1010	Design Review	0		40	40	CS_MSOA						2025-02-17 08:00	2025-02-21 16:00							DT_FixedDrtn			2025-02-17 08:00	CS_MEOB	2025-02-21 16:30			
+%R	1004	100	5	11	CP_Drtn		TT_Task	TK_NotStart	C1000	Excavation	-10		80	80							2025-03-03 07:00	2025-03-12 17:00				240	0	240	DT_FixedQty						40	0	40
+%R	1005	100	3	11	CP_Drtn		TT_Task	TK_NotStart	C1010	Contractor’s Mobilisation	100		50	50							2025-02-24 07:00	2025-02-28 17:00				100.5	0	100.5	DT_FixedRate						12	1.5	10.5
+%R	1006	100	777	99	CP_Drtn		TT_Task	TK_NotStart	Z9999	Orphan activity			8	8							2025-02-03 08:00	2025-02-03 16:00															
+%R	1007	100	1	10	CP_Drtn		TT_FinMile	TK_NotStart	F1000	Project Finish	-10		0	0	CS_MEOB						2025-03-13 08:00	2025-03-13 08:00															
+%T	ACTVTYPE
+%F	actv_code_type_id	actv_short_len	seq_num	actv_code_type	proj_id	wbs_id	actv_code_type_scope
+%R	60		1	Discipline	100		AS_Project
+%R	61		2	Phase			AS_Global
+%R	62		3	Phase	100		AS_Project
+%R	63		0	Unused	100		AS_Project
+%T	ACTVCODE
+%F	actv_code_id	parent_actv_code_id	actv_code_type_id	actv_code_name	short_name	seq_num
+%R	600		60	Engineering	ENG	1
+%R	601		60	Civil works	CIV	2
+%R	610		61	Global phase 1	P1	1
+%R	620		62	Design phase	DES	1
+%R	621	620	62	Detailed design	D1	2
+%R	630		63	Never used	X	1
+%T	TASKACTV
+%F	task_id	actv_code_type_id	actv_code_id	proj_id
+%R	1002	60	600	100
+%R	1003	60	600	100
+%R	1004	60	601	100
+%R	1005	60	601	100
+%R	1002	61	610	100
+%R	1002	62	620	100
+%R	1003	62	621	100
+%R	9999	60	600	100
+%R	1004	62	999	100
 %T	RSRC
 %F	rsrc_id	parent_rsrc_id	rsrc_name	rsrc_short_name	rsrc_type
 %R	50		Civil Crew	CIV	RT_Labor

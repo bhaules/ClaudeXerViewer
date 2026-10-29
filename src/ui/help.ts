@@ -43,7 +43,19 @@ const SECTIONS: Section[] = [
     title: "Columns and sorting",
     html: `
       <ul>
-        <li><b>View &gt; Columns...</b>, or right-click the column headers, opens the Columns dialog. Pick from <b>Available Options</b> (grouped like P6, including Labor Units and the file's activity UDFs) and order them under <b>Selected Options</b>. Double-click, the arrow buttons, Ctrl/Shift-click and the filter box all work.</li>
+        <li><b>View &gt; Columns...</b>, or right-click the column headers, opens the Columns dialog. Pick from <b>Available Options</b> and order them under <b>Selected Options</b>. Double-click, the arrow buttons, Ctrl/Shift-click and the filter box all work.</li>
+        <li>Available columns, grouped like P6:
+          <ul>
+            <li><b>General:</b> Activity ID and Name, Status, Activity Type, Calendar, Duration Type, Percent Complete Type, Primary and Secondary Constraint, Primary Resource, WBS Code, WBS Name, Project.</li>
+            <li><b>Activity Codes:</b> every code type the file uses, each as the code value and as its description.</li>
+            <li><b>Dates:</b> Start, Finish, Actual Start/Finish, Planned Start/Finish, Late Start/Finish, Expected Finish, constraint dates.</li>
+            <li><b>Durations:</b> Original and Remaining Duration, Total and Free Float.</li>
+            <li><b>Percent Complete:</b> Activity % Complete, Physical % Complete.</li>
+            <li><b>Units:</b> Budgeted / Actual / Remaining Labor and Nonlabor Units (WBS bands show totals).</li>
+            <li><b>User Defined Fields:</b> every activity UDF that has a value in the file.</li>
+          </ul>
+        </li>
+        <li>Code and UDF columns are saved by name, so a layout carries over to other files that use the same codes and UDFs.</li>
         <li>Drag the edge of a header to resize a column.</li>
         <li>Click a header to sort activities <b>within each WBS</b>; click again for descending, a third time to go back to the default (Start, then Activity ID). <b>View &gt; Clear Sort</b> also resets it.</li>
         <li><b>View &gt; Duration Unit</b> shows activity durations in hours, days, weeks or months, using each activity's own calendar.</li>

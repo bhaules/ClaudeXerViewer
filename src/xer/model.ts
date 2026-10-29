@@ -43,6 +43,21 @@ export interface Wbs {
   totalFloatHrs: number | null;
   critical: boolean;
   labor: LaborUnits;
+  nonlabor: LaborUnits;
+}
+
+/** An activity code type (ACTVTYPE), e.g. "Discipline". Only types used in the file are kept. */
+export interface ActivityCodeType {
+  id: string;
+  /** The name users see; global/EPS types get "(Global)"/"(EPS)" when a name is used twice. */
+  label: string;
+  seq: number;
+}
+
+/** The code an activity has for one code type: value ("ME") and description ("Mechanical"). */
+export interface ActivityCodeValue {
+  value: string;
+  description: string;
 }
 
 /** Labor units in hours of work (TASK *_work_qty), summed for WBS. */
@@ -109,15 +124,32 @@ export interface Activity {
   startConstrained: boolean;
   finishConstrained: boolean;
   constraint: string;
+  constraintDate: number | null;
+  constraint2: string;
+  constraint2Date: number | null;
   plannedStart: number | null;
   plannedFinish: number | null;
   lateStart: number | null;
   lateFinish: number | null;
+  actualStart: number | null;
+  actualFinish: number | null;
+  expectedFinish: number | null;
+  /** TASK.duration_type, e.g. DT_FixedDrtn. */
+  durationType: string;
+  /** TASK.complete_pct_type: CP_Drtn, CP_Phys or CP_Units. */
+  pctCompleteType: string;
+  physPctComplete: number | null;
+  /** Name of TASK.rsrc_id, or "". */
+  primaryResource: string;
   critical: boolean;
   labor: LaborUnits;
+  /** Nonlabor units (TASK *_equip_qty). */
+  nonlabor: LaborUnits;
   assignments: Assignment[];
   /** UDF values keyed by udf_type_id. */
   udf: Map<string, UdfValue>;
+  /** Activity code values keyed by actv_code_type_id. */
+  codes: Map<string, ActivityCodeValue>;
   preds: Relationship[];
   succs: Relationship[];
   raw: Row;
@@ -145,6 +177,8 @@ export interface Schedule {
   udfTypes: UdfType[];
   /** Resources with at least one assignment in the file, by Resource ID. */
   resources: Resource[];
+  /** Activity code types used by at least one activity, in P6 order. */
+  codeTypes: ActivityCodeType[];
 }
 
 const ALL_DAY: DayRanges = [[0, 24 * 60]];
@@ -274,6 +308,7 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
       totalFloatHrs: null,
       critical: false,
       labor: { budget: 0, actual: 0, remaining: 0 },
+      nonlabor: { budget: 0, actual: 0, remaining: 0 },
     });
   }
 
@@ -326,6 +361,7 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
   for (const r of roots) assignLevels(r, 0);
 
   // Activities
+  const rsrcNames = new Map(get("RSRC").map((r) => [r.rsrc_id, r.rsrc_name || r.rsrc_short_name]));
   let orphanWbs: Wbs | null = null;
   const activities: Activity[] = [];
   const activityById = new Map<string, Activity>();
@@ -377,18 +413,34 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
       startConstrained: START_CONSTRAINTS.has(r.cstr_type) || START_CONSTRAINTS.has(r.cstr_type2),
       finishConstrained: FINISH_CONSTRAINTS.has(r.cstr_type) || FINISH_CONSTRAINTS.has(r.cstr_type2),
       constraint: r.cstr_type ?? "",
+      constraintDate: parseXerDate(r.cstr_date),
+      constraint2: r.cstr_type2 ?? "",
+      constraint2Date: parseXerDate(r.cstr_date2),
       plannedStart: parseXerDate(r.target_start_date),
       plannedFinish: parseXerDate(r.target_end_date),
       lateStart: parseXerDate(r.late_start_date),
       lateFinish: parseXerDate(r.late_end_date),
+      actualStart: actStart,
+      actualFinish: actEnd,
+      expectedFinish: parseXerDate(r.expect_end_date),
+      durationType: r.duration_type ?? "",
+      pctCompleteType: r.complete_pct_type ?? "",
+      physPctComplete: num(r.phys_complete_pct),
+      primaryResource: rsrcNames.get(r.rsrc_id) ?? "",
       critical: false,
       labor: {
         budget: num(r.target_work_qty) ?? 0,
         actual: num(r.act_work_qty) ?? 0,
         remaining: num(r.remain_work_qty) ?? 0,
       },
+      nonlabor: {
+        budget: num(r.target_equip_qty) ?? 0,
+        actual: num(r.act_equip_qty) ?? 0,
+        remaining: num(r.remain_equip_qty) ?? 0,
+      },
       assignments: [],
       udf: new Map(),
+      codes: new Map(),
       preds: [],
       succs: [],
       raw: r,
@@ -425,8 +477,9 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
   const udfTypes = readActivityUdfs(get("UDFTYPE"), get("UDFVALUE"), activityById);
 
   const resources = readAssignments(get("RSRC"), get("TASKRSRC"), activityById);
+  const codeTypes = readActivityCodes(get("ACTVTYPE"), get("ACTVCODE"), get("TASKACTV"), activityById);
 
-  return { header, projects, roots, activities, activityById, relationships, calendars, udfTypes, resources };
+  return { header, projects, roots, activities, activityById, relationships, calendars, udfTypes, resources, codeTypes };
 }
 
 const EMPTY_WBS: Wbs = {
@@ -448,6 +501,7 @@ const EMPTY_WBS: Wbs = {
   totalFloatHrs: null,
   critical: false,
   labor: { budget: 0, actual: 0, remaining: 0 },
+  nonlabor: { budget: 0, actual: 0, remaining: 0 },
 };
 
 const UDF_DATE_TYPES = new Set(["FT_START_DATE", "FT_END_DATE", "FT_DATE"]);
@@ -476,7 +530,54 @@ function readActivityUdfs(typeRows: Row[], valueRows: Row[], activities: Map<str
   return [...types.values()].filter((t) => used.has(t.id)).sort((a, b) => a.label.localeCompare(b.label));
 }
 
-const RESOURCE_TYPES: Record<string, string> = { RT_Labor: "Labor", RT_Equip: "Nonlabor", RT_Mat: "Material" };
+const CODE_SCOPES: Record<string, string> = { AS_Global: "Global", AS_EPS: "EPS", AS_Project: "Project" };
+
+/**
+ * ACTVTYPE (code types), ACTVCODE (values: short_name = value, actv_code_name =
+ * description) and TASKACTV (which value each activity has). Only types that some
+ * activity uses are returned. Code types can share a name across scopes (a Global
+ * "Phase" and a Project "Phase"); the non-project ones then get "(Global)" or "(EPS)".
+ */
+function readActivityCodes(typeRows: Row[], codeRows: Row[], assignRows: Row[], activities: Map<string, Activity>): ActivityCodeType[] {
+  const types = new Map<string, { row: Row; used: boolean }>();
+  for (const r of typeRows) types.set(r.actv_code_type_id, { row: r, used: false });
+  const codes = new Map<string, ActivityCodeValue>();
+  for (const r of codeRows) codes.set(r.actv_code_id, { value: r.short_name ?? "", description: r.actv_code_name ?? "" });
+
+  for (const r of assignRows) {
+    const type = types.get(r.actv_code_type_id);
+    const code = codes.get(r.actv_code_id);
+    const act = activities.get(r.task_id);
+    if (!type || !code || !act) continue;
+    act.codes.set(r.actv_code_type_id, code);
+    type.used = true;
+  }
+
+  const used = [...types.values()].filter((t) => t.used).map((t) => t.row);
+  const nameCount = new Map<string, number>();
+  for (const r of used) nameCount.set(r.actv_code_type, (nameCount.get(r.actv_code_type) ?? 0) + 1);
+  const result = used
+    .map((r) => {
+      const scope = CODE_SCOPES[r.actv_code_type_scope] ?? r.actv_code_type_scope;
+      const clash = (nameCount.get(r.actv_code_type) ?? 0) > 1 && scope !== "Project";
+      return {
+        id: r.actv_code_type_id,
+        label: clash ? `${r.actv_code_type} (${scope})` : r.actv_code_type,
+        seq: num(r.seq_num) ?? 0,
+      };
+    })
+    .sort((a, b) => a.seq - b.seq || a.label.localeCompare(b.label));
+  // Still the same name (e.g. two projects' own "Area" types in one file): number them.
+  const seen = new Map<string, number>();
+  for (const t of result) {
+    const n = (seen.get(t.label) ?? 0) + 1;
+    seen.set(t.label, n);
+    if (n > 1) t.label = `${t.label} (${n})`;
+  }
+  return result;
+}
+
+const RESOURCE_TYPES: Record<string, string> ={ RT_Labor: "Labor", RT_Equip: "Nonlabor", RT_Mat: "Material" };
 
 function readAssignments(rsrcRows: Row[], assignRows: Row[], activities: Map<string, Activity>): Resource[] {
   const byId = new Map<string, Resource>();
@@ -583,24 +684,28 @@ function rollUp(node: Wbs, include?: (a: Activity) => boolean): void {
   };
 
   const labor: LaborUnits = { budget: 0, actual: 0, remaining: 0 };
-  const addLabor = (l: LaborUnits) => {
-    labor.budget += l.budget;
-    labor.actual += l.actual;
-    labor.remaining += l.remaining;
+  const nonlabor: LaborUnits = { budget: 0, actual: 0, remaining: 0 };
+  const add = (into: LaborUnits, l: LaborUnits) => {
+    into.budget += l.budget;
+    into.actual += l.actual;
+    into.remaining += l.remaining;
   };
 
   for (const a of own) {
     take(a.start, a.startActual, a.finish, a.finishActual, a.totalFloatHrs, a.critical);
-    addLabor(a.labor);
+    add(labor, a.labor);
+    add(nonlabor, a.nonlabor);
   }
   for (const c of node.children) {
     rollUp(c, include);
     if (c.activityCount === 0) continue;
     count += c.activityCount;
     take(c.start, c.startActual, c.finish, c.finishActual, c.totalFloatHrs, c.critical);
-    addLabor(c.labor);
+    add(labor, c.labor);
+    add(nonlabor, c.nonlabor);
   }
   node.labor = labor;
+  node.nonlabor = nonlabor;
 
   node.activityCount = count;
   node.start = start;

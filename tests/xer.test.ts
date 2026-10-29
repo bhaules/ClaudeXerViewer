@@ -197,6 +197,67 @@ describe("labor units and UDF columns", () => {
   });
 });
 
+describe("activity codes and extra columns", () => {
+  const ctx = { unit: "d" as const };
+  const cols = new Map(scheduleColumns(schedule).map((c) => [c.key, c]));
+  const cell = (key: string, code: string) => cols.get(key)!.text(act(code), ctx);
+
+  it("offers only code types that are used, in P6 order, naming same-name types apart", () => {
+    expect(schedule.codeTypes.map((t) => t.label)).toEqual(["Discipline", "Phase (Global)", "Phase"]);
+    const groups = scheduleColumns(schedule).filter((c) => c.group === "Activity Codes").map((c) => c.label);
+    expect(groups).toEqual([
+      "Discipline", "Discipline (Description)",
+      "Phase (Global)", "Phase (Global) (Description)",
+      "Phase", "Phase (Description)",
+    ]);
+  });
+
+  it("shows each activity's code value and description", () => {
+    expect(cell("code:Discipline", "E1000")).toBe("ENG");
+    expect(cell("codedesc:Discipline", "C1000")).toBe("Civil works");
+    expect(cell("code:Phase (Global)", "E1000")).toBe("P1");
+    expect(cell("code:Phase", "E1010")).toBe("D1"); // a sub-code shows its own value
+    expect(cell("codedesc:Phase", "E1010")).toBe("Detailed design");
+    expect(cell("code:Discipline", "A1000")).toBe("");
+    expect(cell("code:Phase", "C1000")).toBe(""); // assignment to a missing code is ignored
+  });
+
+  it("sorts and filters by a code like any other column", () => {
+    const { test } = compileFilter({ ...emptyFilter(), columns: new Map([["code:Discipline", "=civ"]]) }, cols, ctx);
+    expect(schedule.activities.filter(test!).map((a) => a.code).sort()).toEqual(["C1000", "C1010"]);
+    const order = activitiesInDisplayOrder(schedule, view({ sort: { key: "code:Discipline", dir: 1 } })).map((a) => a.code);
+    expect(order.slice(0, 2)).toEqual(["A1000", "F1000"]); // root WBS: no codes, default order
+  });
+
+  it("shows the extra date, type and resource columns", () => {
+    expect(cell("actualStart", "E1000")).toBe("07-Jan-25");
+    expect(cell("actualFinish", "E1000")).toBe("");
+    expect(cell("expectedFinish", "E1000")).toBe("20-Feb-25");
+    expect(cell("constraintDate", "E1010")).toBe("17-Feb-25");
+    expect(cell("constraint2", "E1010")).toBe("Finish On or Before");
+    expect(cell("constraint2Date", "E1010")).toBe("21-Feb-25");
+    expect(cell("durationType", "E1000")).toBe("Fixed Duration and Units");
+    expect(cell("durationType", "E1010")).toBe("Fixed Duration and Units/Time");
+    expect(cell("durationType", "C1000")).toBe("Fixed Units");
+    expect(cell("durationType", "C1010")).toBe("Fixed Units/Time");
+    expect(cell("pctType", "E1010")).toBe("Physical");
+    expect(cell("physPct", "E1010")).toBe("0%");
+    expect(cell("physPct", "E1000")).toBe("");
+    expect(cell("primaryResource", "E1000")).toBe("Engineer");
+    expect(cell("wbsCode", "C1000")).toBe("DEMO-001.CON.CIV");
+    expect(cell("wbsName", "C1000")).toBe("Civil");
+    expect(cell("project", "C1000")).toBe("DEMO-001");
+  });
+
+  it("shows nonlabor units and sums them on WBS rows", () => {
+    expect(cell("remNonlabor", "C1000")).toBe("40h");
+    expect(cell("actNonlabor", "C1010")).toBe("1.5h");
+    const con = schedule.projects[0].root.children[1];
+    expect(cols.get("remNonlabor")!.wbsText(con, ctx)).toBe("50.5h");
+    expect(cols.get("budNonlabor")!.wbsText(schedule.projects[0].root, ctx)).toBe("52h");
+  });
+});
+
 describe("resources and usage", () => {
   const dd = schedule.projects[0].dataDate;
   const profile = buildUsageProfile(schedule, dd);

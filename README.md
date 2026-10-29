@@ -43,9 +43,12 @@ in the same browser.
 - **Columns**: drag a header edge to resize. Click a header to sort activities
   within each WBS (click again for descending, a third time to reset).
   **View > Columns...** (or right-click the headers) opens the Columns dialog:
-  pick from Available Options (including Labor Units and the file's activity
-  UDFs) and order them under Selected Options. Double-click, the arrow buttons,
-  Ctrl/Shift-click and the filter box all work as in P6.
+  pick from Available Options and order them under Selected Options. Besides the
+  usual P6 columns (dates, durations, float, constraints, duration and % complete
+  types, primary resource, WBS code/name, labor and nonlabor units) it offers every
+  **activity code** type in the file (value and description) and every activity
+  **UDF** with values. Double-click, the arrow buttons, Ctrl/Shift-click and the
+  filter box all work as in P6.
 - **Filters** (**View > Filters**, Ctrl+Shift+F): tick statuses, Critical or
   Milestones, or pick a date window ("Look ahead..." fills it from the data date).
   Type in the boxes under the column headers: text matches anywhere (`=x` exact,

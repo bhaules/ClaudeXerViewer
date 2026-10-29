@@ -105,7 +105,19 @@ under the mouse on mousedown, or double-click stops working.
   units over the remaining dates, by working minutes on the activity's calendar
   (linear; resource curves are ignored), stored as per-day running totals.
 - Labor units: `TASK.target_work_qty` / `act_work_qty` / `remain_work_qty`
-  (budgeted / actual / remaining, in hours). WBS rows show sums.
+  (budgeted / actual / remaining, in hours). Nonlabor: `*_equip_qty`. WBS rows show sums.
+- Activity codes: `ACTVTYPE` (code types; `actv_code_type` is the name,
+  `actv_code_type_scope` AS_Global / AS_EPS / AS_Project), `ACTVCODE` (`short_name` =
+  value, `actv_code_name` = description; `parent_actv_code_id` makes sub-codes) and
+  `TASKACTV` (task_id, type, code). Only used types become columns, two each (value,
+  "(Description)"), keyed `code:<label>` / `codedesc:<label>`. The same name can exist
+  in several scopes (23517 has a Global and a Project "PG_Phase"): non-project ones
+  get "(Global)"/"(EPS)", remaining clashes are numbered. A sub-code shows its own value.
+- Other TASK fields used as columns: `expect_end_date`, `cstr_date`, `cstr_type2`,
+  `cstr_date2`, `duration_type` (DT_FixedDUR2 = Fixed Duration and Units,
+  DT_FixedDrtn = Fixed Duration and Units/Time, DT_FixedQty = Fixed Units,
+  DT_FixedRate = Fixed Units/Time), `complete_pct_type`, `phys_complete_pct`,
+  `rsrc_id` (primary resource, shown by name).
 - UDFs: `UDFTYPE` (`table_name` TASK = activity UDF, `udf_type_label` is the name
   users see, `logical_data_type` FT_TEXT / FT_INT / FT_FLOAT_2_DECIMALS / FT_MONEY /
   FT_START_DATE / FT_END_DATE / FT_STATICTYPE) and `UDFVALUE` (`fk_id` = task_id;
