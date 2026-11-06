@@ -33,7 +33,7 @@ const SECTIONS: Section[] = [
         <li>Activities are grouped by <b>WBS</b>. Click a band's arrow, double-click it, or press → / ← to expand or collapse it.</li>
         <li><b>View &gt; Expand All</b>, <b>Collapse All</b> and <b>Expand To &gt; Level n</b> open the whole tree to a level.</li>
         <li>Move with ↑ ↓, Page Up/Down, Home and End. ← on an activity jumps up to its WBS band.</li>
-        <li>WBS bands show the summarised <b>Start</b> and <b>Finish</b>, the lowest <b>Total Float</b>, labour totals, and <b>Original / Remaining Duration in weeks</b> worked out from those summarised dates (remaining runs from the data date).</li>
+        <li>WBS bands show the summarised <b>Start</b> and <b>Finish</b>, the lowest <b>Total Float</b> and labour totals. Their <b>Original / Remaining Duration</b> is worked out from those summarised dates (remaining runs from the data date), not added up from the activities. <b>View &gt; WBS Band Durations</b> picks how: <b>Calendar Weeks</b> (default) or <b>Working Time</b>, the working hours on the project calendar between those dates, shown in the Duration Unit like the activities.</li>
         <li>Dates follow P6: <b>A</b> after a date means actual; <b>*</b> means a constraint applies.</li>
         <li><b>View &gt; Hide Empty WBS</b> hides bands with no activities under them.</li>
       </ul>`,
@@ -57,6 +57,7 @@ const SECTIONS: Section[] = [
         </li>
         <li>Code and UDF columns are saved by name, so a layout carries over to other files that use the same codes and UDFs.</li>
         <li>Drag the edge of a header to resize a column.</li>
+        <li>The <b>funnel</b> on each header opens that column's filter: sort buttons, a condition, and a list of the column's values to tick (see Find and filters).</li>
         <li>Click a header to sort activities <b>within each WBS</b>; click again for descending, a third time to go back to the default (Start, then Activity ID). <b>View &gt; Clear Sort</b> also resets it.</li>
         <li><b>View &gt; Duration Unit</b> shows activity durations in hours, days, weeks or months, using each activity's own calendar.</li>
       </ul>`,
@@ -70,8 +71,10 @@ const SECTIONS: Section[] = [
         <li><b>View &gt; Filters</b> (Ctrl+Shift+F) shows the filter bar and a filter row under the column headers.</li>
         <li><b>Filter bar:</b> tick Not Started / In Progress / Completed, Critical, Milestones or With comments. <b>Active between</b> keeps activities that are underway at any point in a date range; <b>Look ahead</b> fills it from the data date (2 weeks to 3 months).</li>
         <li><b>Filter row:</b> type under any column. Text matches anywhere (<code>=x</code> exact, <code>&lt;&gt;x</code> excludes). Numbers and dates take <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code> <code>=</code>, e.g. <code>&gt;0</code> in Remaining Labor Units or <code>&lt;01-Jul-26</code> in Finish. A plain <code>Jul-26</code> finds any date in July 2026. A red box means the filter wasn't understood. Esc clears a box.</li>
+        <li><b>Column funnel:</b> click the funnel on a column header for an Excel-style filter. Tick the values to keep (with how many activities have each; <i>(Blanks)</i> is the empty ones), search the list, type a condition (same as the filter row), or sort the column. The list only shows values left in by the other filters. A filtered column's funnel turns blue.</li>
         <li>While filtering, WBS bands only show matching activities and their totals are added up from those, like P6. The bar turns yellow and shows how many activities are showing.</li>
-        <li><b>Clear Filters</b> resets everything. Hiding the filter section also clears it, so nothing is ever filtered out of sight.</li>
+        <li><b>Clear Filters</b> resets everything. Hiding the filter section clears the filter bar's own ticks and dates; column filters stay on (their funnels stay blue) and the status bar says how many activities are showing.</li>
+        <li>Changing the Duration Unit drops values ticked in duration columns, since they were in the old unit.</li>
       </ul>`,
   },
   {
@@ -141,6 +144,7 @@ const SECTIONS: Section[] = [
       <ul>
         <li><b>File &gt; Save Viewer with Schedule</b> (Ctrl+S) saves one <b>.html</b> file with the schedule (and any comments) inside. Send it instead of a PDF: whoever receives it double-clicks it and the schedule opens, with nothing to install.</li>
         <li>The schedule is compressed, so the file is usually much smaller than the .xer.</li>
+        <li><b>File &gt; Export to Excel</b> saves the grid as an <b>.xlsx</b>: <b>Rows as Shown</b> (what's expanded now) or <b>All Rows</b> (every WBS expanded, Ctrl+E). It has the columns you're showing, in order, with the current sort and filters. Dates and numbers are real Excel values, WBS bands keep their colours and become Excel row groups, and the header row is frozen with AutoFilter on. A second sheet, <b>Export Info</b>, records the file, data date, sort and filters. Chrome and Edge ask where to save; other browsers put it in Downloads. The A (actual) and * (constraint) date markers aren't carried across.</li>
       </ul>`,
   },
   {
@@ -148,7 +152,7 @@ const SECTIONS: Section[] = [
     title: "Good to know",
     html: `
       <ul>
-        <li><b>Private:</b> files are read inside this browser window. Nothing is uploaded or sent anywhere, and the viewer works offline.</li>
+        <li><b>Private:</b> files are read inside this browser window. Nothing is uploaded or sent anywhere, and the viewer works offline. The Excel export is built in the browser too.</li>
         <li><b>Read-only:</b> the viewer never changes a .xer file. Make schedule changes in P6.</li>
         <li><b>Durations</b> are shown as P6 stored them when the schedule was last scheduled, converted with each activity's calendar. If your P6 is set to a fixed hours-per-day instead, day counts can differ for 10 or 12-hour calendars.</li>
         <li><b>Driving relationships</b> are worked out from the dates P6 exports, using each activity's working calendar.</li>
@@ -183,6 +187,7 @@ export function showShortcuts(): void {
     ["F1", "User guide"],
     ["Ctrl+O", "Open a .xer (or a saved viewer .html)"],
     ["Ctrl+S", "Save viewer with schedule (and comments)"],
+    ["Ctrl+E", "Export all rows to Excel"],
     ["Ctrl+F", "Find activity by ID or name"],
     ["F3 / Shift+F3", "Find next / previous"],
     ["Ctrl+Shift+F", "Show / hide filters"],
@@ -193,6 +198,7 @@ export function showShortcuts(): void {
     ["Double-click a relationship", "Go to that activity"],
     ["Ctrl+Mouse wheel on Gantt", "Zoom timescale"],
     ["Right-click column headers", "Columns dialog"],
+    ["Funnel on a column header", "Filter or sort that column"],
     ["Esc", "Close a dialog, menu or the Find box; clear a filter box"],
   ];
   modal("Keyboard Shortcuts", `<table class="hg-keys">${rows.map(([k, v]) => `<tr><td><b>${k}</b></td><td>${v}</td></tr>`).join("")}</table>`);

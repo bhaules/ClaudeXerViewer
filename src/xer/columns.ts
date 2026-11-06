@@ -9,6 +9,7 @@ import {
   type UdfType,
   type Wbs,
 } from "./model";
+import { workMinutesByDay } from "./calendar";
 import {
   activityTypeName,
   constraintName,
@@ -20,8 +21,13 @@ import {
   type DurationUnit,
 } from "./format";
 
+/** How WBS bands show Original / Remaining Duration (View > WBS Band Durations). */
+export type WbsDurationMode = "weeks" | "working";
+
 export interface ColumnContext {
   unit: DurationUnit;
+  /** Defaults to "weeks". */
+  wbsDurations?: WbsDurationMode;
 }
 
 export type SortValue = number | string | null;
@@ -66,6 +72,34 @@ export function wbsWeeks(w: Wbs, remaining: boolean): number | null {
 }
 
 const formatWeeks = (weeks: number | null) => (weeks === null ? "" : formatNumber(weeks, 1) + "w");
+
+const workCache = new Map<string, number>();
+
+/**
+ * The other WBS band duration mode: working hours on the project calendar between the
+ * band's summarised dates (remaining from the later of the start and the data date).
+ * Cached, since bands are redrawn on every scroll.
+ */
+export function wbsWorkHours(w: Wbs, remaining: boolean): number | null {
+  if (w.start === null || w.finish === null) return null;
+  if (remaining && w.finishActual) return 0;
+  const from = remaining ? Math.max(w.start, w.project?.dataDate ?? w.start) : w.start;
+  if (w.finish <= from) return 0;
+  const cal = wbsCal(w);
+  const key = `${cal.id}|${from}|${w.finish}`;
+  let hours = workCache.get(key);
+  if (hours === undefined) {
+    hours = workMinutesByDay(cal.work, from, w.finish, 40_000).reduce((n, [, min]) => n + min, 0) / 60;
+    if (workCache.size > 50_000) workCache.clear();
+    workCache.set(key, hours);
+  }
+  return hours;
+}
+
+function wbsDuration(w: Wbs, ctx: ColumnContext, remaining: boolean): string {
+  if (ctx.wbsDurations === "working") return formatDuration(wbsWorkHours(w, remaining), wbsCal(w), ctx.unit);
+  return formatWeeks(wbsWeeks(w, remaining));
+}
 
 const durationColumn = (
   key: string,
@@ -158,8 +192,8 @@ const generalColumn = (
 export const COLUMNS: Column[] = [
   generalColumn("code", "Activity ID", 190, (a) => a.code, true, (w) => w.code),
   generalColumn("name", "Activity Name", 320, (a) => a.name, true, (w) => w.name),
-  durationColumn("origDur", "Original Duration", (a) => a.origDurHrs, (w) => formatWeeks(wbsWeeks(w, false)), true),
-  durationColumn("remDur", "Remaining Duration", (a) => a.remDurHrs, (w) => formatWeeks(wbsWeeks(w, true)), true),
+  durationColumn("origDur", "Original Duration", (a) => a.origDurHrs, (w, ctx) => wbsDuration(w, ctx, false), true),
+  durationColumn("remDur", "Remaining Duration", (a) => a.remDurHrs, (w, ctx) => wbsDuration(w, ctx, true), true),
   {
     key: "pct",
     label: "Activity % Complete",

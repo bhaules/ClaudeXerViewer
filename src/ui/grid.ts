@@ -9,6 +9,7 @@ import { ROW_HEIGHT, wbsColors } from "./theme";
 const INDENT = 14;
 const OVERSCAN = 8;
 const MIN_COL_WIDTH = 30;
+const FUNNEL = `<svg viewBox="0 0 10 10" width="10" height="10"><path d="M0 .5h10L6.2 5.2V10L3.8 8.6V5.2z" fill="currentColor"/></svg>`;
 
 export interface GridHost {
   rows(): GridRow[];
@@ -29,6 +30,8 @@ export interface GridHost {
   filterValue(key: string): string;
   filterError(key: string): boolean;
   onFilterInput(key: string, value: string): void;
+  /** Column filter funnels on the headers (null: none). Highlighted while that column is filtered. */
+  columnFilter: { active(key: string): boolean; open(key: string, anchor: HTMLElement): void } | null;
   onToggle(index: number): void;
   onSelect(index: number): void;
   onActivate(index: number): void;
@@ -158,11 +161,15 @@ export class Grid {
 
   private renderHeader(): void {
     const sort = this.host.sort();
+    const cf = this.host.columnFilter;
     this.labels.innerHTML = this.host
       .columns()
       .map((c) => {
         const ind = sort?.key === c.key ? `<span class="sort">${sort.dir === 1 ? "▲" : "▼"}</span>` : "";
-        return `<div class="hcell${this.host.sortable ? " sortable" : ""}" data-key="${esc(c.key)}" style="width:${this.host.width(c.key)}px">${esc(c.label)}${ind}<span class="rz"></span></div>`;
+        const funnel = cf
+          ? `<span class="hf${cf.active(c.key) ? " on" : ""}" title="Filter this column">${FUNNEL}</span>`
+          : "";
+        return `<div class="hcell${this.host.sortable ? " sortable" : ""}" data-key="${esc(c.key)}" style="width:${this.host.width(c.key)}px">${esc(c.label)}${ind}${funnel}<span class="rz"></span></div>`;
       })
       .join("");
     this.renderFilterRow();
@@ -173,6 +180,14 @@ export class Grid {
         if (this.host.sortable && !(e.target as HTMLElement).classList.contains("rz")) this.host.onSort(key);
       });
       cell.querySelector<HTMLElement>(".rz")!.addEventListener("mousedown", (e) => this.startResize(e, key));
+      const funnel = cell.querySelector<HTMLElement>(".hf");
+      if (funnel && cf) {
+        funnel.addEventListener("mousedown", (e) => e.stopPropagation()); // don't start a resize or sort
+        funnel.addEventListener("click", (e) => {
+          e.stopPropagation();
+          cf.open(key, funnel);
+        });
+      }
     }
   }
 

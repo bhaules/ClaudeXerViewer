@@ -24,7 +24,7 @@ export interface ViewState {
   filter: Predicate | null;
 }
 
-function compareValues(a: SortValue, b: SortValue): number {
+export function compareValues(a: SortValue, b: SortValue): number {
   // Blanks always sort last, whichever direction.
   if (a === null || a === "") return b === null || b === "" ? 0 : 1;
   if (b === null || b === "") return -1;

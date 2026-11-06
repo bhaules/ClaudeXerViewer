@@ -48,13 +48,23 @@ in the same browser.
   types, primary resource, WBS code/name, labor and nonlabor units) it offers every
   **activity code** type in the file (value and description) and every activity
   **UDF** with values. Double-click, the arrow buttons, Ctrl/Shift-click and the
-  filter box all work as in P6.
+  filter box all work as in P6. Code and UDF columns are saved by name, so a layout
+  carries over to other files that use them.
 - **Filters** (**View > Filters**, Ctrl+Shift+F): tick statuses, Critical or
   Milestones, or pick a date window ("Look ahead..." fills it from the data date).
   Type in the boxes under the column headers: text matches anywhere (`=x` exact,
   `<>x` excludes); numbers and dates take `>`, `<`, `>=`, `<=`, `=`, e.g. `>0` in
   Remaining Labor Units or `<01-Jul-26` in Finish. WBS totals show only what the
   filter matches. **Clear Filters** resets everything.
+- **Column filters**: the funnel on each column header opens an Excel-style filter:
+  tick the values to keep (with counts, and (Blanks)), search the list, type a
+  condition, or sort the column. A filtered column's funnel turns blue. Column filters
+  stay on when the filter section is hidden; the status bar then says so.
+- **Export to Excel** (**File > Export to Excel**, Ctrl+E for all rows): the columns
+  you're showing, with the current sort and filters, as an `.xlsx`. Dates and numbers
+  are real Excel values, WBS bands keep their colours and become row groups, and an
+  Export Info sheet records the source file, data date and filters. It's built in the
+  browser; nothing is uploaded.
 - **Resource histogram**: the **Resource Usage** tab at the bottom lists the
   resources with their budgeted, actual and remaining units, and shows a histogram
   lined up under the Gantt (it follows the Gantt's zoom and scrolling). Click a
@@ -75,7 +85,9 @@ in the same browser.
   **View > Relationship Lines > None / Driving Only / All**. The selected
   activity's lines are drawn thicker.
 - **Durations**: **View > Duration Unit** (hours, days, weeks, months), converted
-  with each activity's calendar.
+  with each activity's calendar. WBS bands work theirs out from their summarised
+  start and finish: **View > WBS Band Durations** shows them in **Calendar Weeks**
+  (default) or as **Working Time** on the project calendar, in the Duration Unit.
 
 Column choices, widths and units are remembered per browser.
 

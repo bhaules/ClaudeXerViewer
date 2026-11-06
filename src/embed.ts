@@ -59,7 +59,7 @@ export async function buildEmbeddedHtml(file: EmbeddedFile, comments: ReviewComm
   return at === -1 ? pristine + tag : pristine.slice(0, at) + tag + "\n" + pristine.slice(at);
 }
 
-export function downloadText(name: string, text: string, type: string): void {
+export function downloadText(name: string, text: BlobPart, type: string): void {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement("a");
   a.href = url;

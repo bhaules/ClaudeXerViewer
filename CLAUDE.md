@@ -41,6 +41,9 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
 - `src/embed.ts`: "Save Viewer with Schedule" (gzip + base64 into a copy of the
   page captured at startup, before the app renders), plus the review comments as a
   `<script id="xer-comments" type="application/json">` block
+- `src/xer/xlsx.ts`: File > Export to Excel. Writes the .xlsx by hand (zip via
+  `CompressionStream`, inline strings, styles); no library. `src/ui/column-filter.ts`:
+  the header funnel popup (value list + condition + sort).
 - `src/xer/comments.ts`: review comment model (targets, merge, save format; no DOM).
   `src/ui/comments.ts`: comment dialogs and the Comments tab
 - `src/features.ts`: feature flags; check them, don't delete features
@@ -133,9 +136,11 @@ under the mouse on mousedown, or double-click stops working.
   Predecessors | Successors panels below; status bar.
 - WBS band rows: bold, colour by level (P6/Python palette in `src/ui/theme.ts`),
   white text on the dark levels, rolled-up start/finish and min total float.
-  Band Original / Remaining Duration are always in calendar weeks from the band's
-  summarised dates (`wbsWeeks`): finish - start, and finish - max(start, data date)
-  (0w when all complete). They deliberately ignore activity durations and calendars.
+  Band Original / Remaining Duration come from the band's summarised dates, never from
+  activity durations: finish - start, and finish - max(start, data date) (0 when all
+  complete). View > WBS Band Durations (`ColumnContext.wbsDurations`, saved in prefs):
+  "weeks" (default, `wbsWeeks`, calendar weeks) or "working" (`wbsWorkHours`, working
+  hours on the project calendar, shown in the Duration Unit; cached).
 - Dates `dd-Mmm-yy`; suffix ` A` for actuals, `*` when a constraint applies.
 - Under each WBS band: its own activities first, then its child WBS bands.
 - Sorting reorders activities WITHIN their WBS; WBS stay in seq_num order.
@@ -170,9 +175,17 @@ under the mouse on mousedown, or double-click stops working.
   `Column.kind` (text: contains / =x / <>x; number and date: > < >= <= = <>; numbers
   are in the displayed duration unit). While filtering, WBS with no matches are hidden
   and WBS totals are re-added from matching activities only (`applyRollups`), like P6.
-  Hiding the filter section clears the filters, so nothing is filtered invisibly.
-  The filter row's inputs are only rebuilt when columns/widths change, never while
-  typing (that would steal focus).
+  Column funnels (`FilterState.values`: column key -> ticked display texts) give an
+  Excel-style value list; its values come from activities passing the OTHER filters.
+  Hiding the filter section clears the filter bar's filters but keeps column filters
+  (funnels stay highlighted and the status bar says "Filter on"), so nothing is
+  filtered invisibly. Changing the Duration Unit drops ticked values on duration
+  columns (their text changed). The filter row's inputs are only rebuilt when
+  columns/widths change, never while typing (that would steal focus).
+- Export to Excel (Ctrl+E = all rows, or rows as shown): visible columns in order,
+  current sort/filters; activity dates/numbers as values (via `sortValue`), WBS rows as
+  coloured bold rows with outline levels (max 7), WBS dates/numbers parsed back from
+  their text. Uses `showSaveFilePicker` when available, else a download.
 - Jumping to an activity (Find, relationship double-click) also scrolls the Gantt
   sideways to its bar.
 
@@ -201,7 +214,7 @@ under the mouse on mousedown, or double-click stops working.
 - Every parsing bug fix gets a test (add rows to the fixture if needed).
 - Read-only: never write or modify .xer files.
 - Never commit real client schedules (`*.xer` is gitignored except fixtures).
-- No exports, printing or cloud features unless asked.
+- No exports (other than Excel), printing or cloud features unless asked.
 - When you add or change something users can do (a menu item, shortcut, panel,
   filter or setting), update the User Guide and shortcuts in `src/ui/help.ts` and the
   README in the same change.

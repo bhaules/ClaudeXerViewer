@@ -23,6 +23,8 @@ export const FEATURES = {
   comments: true,
   /** File > Save Viewer with Schedule (one HTML file with the .xer inside). */
   embedSave: true,
+  /** File > Export to Excel (Ctrl+E): the grid's columns and rows as an .xlsx. */
+  excelExport: true,
   /** WBS levels expanded when a file opens. */
   defaultExpandLevel: 2,
 } as const;

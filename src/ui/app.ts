@@ -2,7 +2,7 @@
 import { buildEmbeddedHtml, downloadText, extractEmbeddedXer } from "../embed";
 import { FEATURES } from "../features";
 import { loadSchedule } from "../xer";
-import { COLUMN_BY_KEY, COLUMNS, scheduleColumns, type Column } from "../xer/columns";
+import { COLUMN_BY_KEY, COLUMNS, scheduleColumns, type Column, type WbsDurationMode } from "../xer/columns";
 import {
   extractCommentsFromHtml,
   liveComments,
@@ -21,13 +21,16 @@ import { XerParseError } from "../xer/parse";
 import {
   activitiesInDisplayOrder,
   buildRows,
+  compareValues,
   expandedAll,
   expandedToLevel,
   revealActivity,
   type GridRow,
   type ViewState,
 } from "../xer/rows";
+import { buildActivitiesXlsx, XLSX_TYPE } from "../xer/xlsx";
 import { el, esc, modal, splitter } from "./dom";
+import { openColumnFilter } from "./column-filter";
 import { openColumnsDialog } from "./columns-dialog";
 import { Gantt } from "./gantt";
 import { Grid } from "./grid";
@@ -38,6 +41,7 @@ import { DEFAULT_HISTOGRAM, ResourcePanel, type HistogramSettings } from "./reso
 import { FilterBar } from "./filterbar";
 import { showAbout, showShortcuts, showUserGuide } from "./help";
 import { Search } from "./search";
+import { wbsColors } from "./theme";
 
 const PREFS_KEY = "xer-viewer-prefs-v1";
 
@@ -45,6 +49,7 @@ interface Prefs {
   columns: string[];
   widths: Record<string, number>;
   unit: DurationUnit;
+  wbsDurations: WbsDurationMode;
   hideEmptyWbs: boolean;
   showGantt: boolean;
   showRelations: boolean;
@@ -67,6 +72,7 @@ const DEFAULT_PREFS: Prefs = {
   columns: COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key),
   widths: {},
   unit: "d",
+  wbsDurations: "weeks",
   hideEmptyWbs: true,
   showGantt: FEATURES.gantt,
   showRelations: FEATURES.relationships,
@@ -82,7 +88,8 @@ function loadPrefs(): Prefs {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<Prefs>;
     const prefs = { ...DEFAULT_PREFS, ...saved };
     prefs.histogram = { ...DEFAULT_HISTOGRAM, ...saved.histogram };
-    prefs.columns = prefs.columns.filter((k) => COLUMN_BY_KEY.has(k) || k.startsWith("udf:"));
+    // UDF and activity code columns depend on the file; keep them for files that have them.
+    prefs.columns = prefs.columns.filter((k) => COLUMN_BY_KEY.has(k) || /^(udf|code|codedesc):/.test(k));
     if (prefs.columns.length === 0) prefs.columns = DEFAULT_PREFS.columns;
     return prefs;
   } catch {
@@ -108,7 +115,7 @@ export class App {
     expanded: new Set(),
     hideEmptyWbs: this.prefs.hideEmptyWbs,
     sort: null,
-    ctx: { unit: this.prefs.unit },
+    ctx: { unit: this.prefs.unit, wbsDurations: this.prefs.wbsDurations },
     columns: new Map(COLUMNS.map((c) => [c.key, c])),
     filter: null,
   };
@@ -169,6 +176,12 @@ export class App {
       filterRow: () => FEATURES.filters && this.prefs.showFilters,
       filterValue: (k) => this.filterState.columns.get(k) ?? "",
       filterError: (k) => this.compiled.errors.has(k),
+      columnFilter: FEATURES.filters
+        ? {
+            active: (k) => !!this.filterState.columns.get(k)?.trim() || this.filterState.values.has(k),
+            open: (k, anchor) => this.openColumnFilter(k, anchor),
+          }
+        : null,
       onFilterInput: (k, v) => {
         this.filterState.columns.set(k, v);
         // Typing re-filters 13k+ activities; wait for a pause.
@@ -537,6 +550,16 @@ export class App {
     if (FEATURES.embedSave) {
       items.push({ label: "Save Viewer with Schedule...", key: "Ctrl+S", enabled: loaded, action: () => void this.saveEmbedded() });
     }
+    if (FEATURES.excelExport) {
+      items.push("-", {
+        label: "Export to Excel",
+        enabled: loaded,
+        items: () => [
+          { label: "Rows as Shown (current expand/collapse)", action: () => void this.exportExcel(false) },
+          { label: "All Rows (fully expanded)", key: "Ctrl+E", action: () => void this.exportExcel(true) },
+        ],
+      });
+    }
     return items;
   }
 
@@ -559,6 +582,10 @@ export class App {
       action: () => this.setExpanded(expandedToLevel(s(), n)),
     }));
     const units: [DurationUnit, string][] = [["h", "Hours"], ["d", "Days"], ["w", "Weeks"], ["m", "Months"]];
+    const wbsModes: [WbsDurationMode, string][] = [
+      ["weeks", "Calendar Weeks"],
+      ["working", "Working Time (in Duration Unit)"],
+    ];
     const items: MenuItem[] = [
       { label: "Expand All", enabled: loaded, action: () => this.setExpanded(expandedAll(s())) },
       { label: "Collapse All", enabled: loaded, action: () => this.setExpanded(new Set()) },
@@ -571,14 +598,32 @@ export class App {
             label,
             checked: () => this.view.ctx.unit === u,
             action: () => {
-              this.view.ctx = { unit: u };
+              this.view.ctx = { ...this.view.ctx, unit: u };
               this.prefs.unit = u;
+              // Ticked duration values were the old unit's text; they would match nothing now.
+              for (const k of [...this.filterState.values.keys()]) {
+                if (this.view.columns.get(k)?.group === "Durations") this.filterState.values.delete(k);
+              }
               this.savePrefs();
               // Duration filters are typed in the displayed unit, so they change meaning.
               if (this.compiled.test) this.applyFilter();
               this.grid.render();
               this.preds.render();
               this.succs.render();
+            },
+          })),
+      },
+      {
+        label: "WBS Band Durations",
+        items: () =>
+          wbsModes.map(([m, label]) => ({
+            label,
+            checked: () => this.prefs.wbsDurations === m,
+            action: () => {
+              this.prefs.wbsDurations = m;
+              this.view.ctx = { ...this.view.ctx, wbsDurations: m };
+              this.savePrefs();
+              this.grid.render();
             },
           })),
       },
@@ -711,6 +756,7 @@ export class App {
         // A sort or filter on a removed column would be invisible; drop it.
         if (this.view.sort && !keys.includes(this.view.sort.key)) this.view.sort = null;
         for (const k of [...this.filterState.columns.keys()]) if (!keys.includes(k)) this.filterState.columns.delete(k);
+        for (const k of [...this.filterState.values.keys()]) if (!keys.includes(k)) this.filterState.values.delete(k);
         this.applyFilter();
       },
     });
@@ -945,6 +991,20 @@ export class App {
     const note = byResource ? `Resource: ${this.resources.selectionLabel()}` : "";
     this.filterBar.setCount(shown, s.activities.length, test !== null, note);
     this.grid.setEmptyMessage(test && shown === 0 ? "No activities match the current filters." : null);
+    this.filterStatus(test ? shown : null);
+  }
+
+  /**
+   * Column filters can be set from the header funnels with the filter section hidden; the
+   * status bar then says how many activities are showing. `shown` is null when unfiltered.
+   */
+  private filterStatus(shown: number | null): void {
+    const total = this.schedule?.activities.length ?? 0;
+    if (shown !== null && !this.prefs.showFilters) {
+      this.setStatus(`Filter on: showing ${shown.toLocaleString()} of ${total.toLocaleString()} activities. View > Clear Filters to remove.`);
+    } else if (this.status.textContent?.startsWith("Filter on")) {
+      this.setStatus("");
+    }
   }
 
   private resourceTabShown(): boolean {
@@ -990,8 +1050,15 @@ export class App {
   private toggleFilters(): void {
     this.prefs.showFilters = !this.prefs.showFilters;
     this.savePrefs();
-    // Hidden filters would silently hide activities, so hiding the section clears them.
-    if (!this.prefs.showFilters && filterActive(this.filterState)) this.clearFilters();
+    // The filter bar's own filters would be invisible once hidden, so they're cleared. Column
+    // filters stay: their header funnels stay highlighted and the status bar says so.
+    if (!this.prefs.showFilters && filterActive(this.filterState)) {
+      Object.assign(this.filterState, { statuses: new Set(), criticalOnly: false, milestonesOnly: false, commentedOnly: false, from: null, to: null });
+      this.filterBar.sync();
+      this.applyFilter();
+    }
+    // Shown again: the filter bar has the count, so drop the status bar note.
+    if (this.prefs.showFilters) this.filterStatus(null);
     this.applyPanelVisibility();
     this.grid.render();
   }
@@ -1041,6 +1108,146 @@ export class App {
     );
   }
 
+  // ---------- Column filter popup ----------
+
+  /** The header funnel: values come from the activities the other filters leave in. */
+  private openColumnFilter(key: string, anchor: HTMLElement): void {
+    const col = this.view.columns.get(key);
+    const s = this.schedule;
+    if (!col || !s) return;
+    const ctx = this.view.ctx;
+    const others: FilterState = { ...this.filterState, columns: new Map(this.filterState.columns), values: new Map(this.filterState.values) };
+    others.columns.delete(key);
+    others.values.delete(key);
+    const test = compileFilter(others, this.view.columns, ctx, (a) => this.commentIndex.has(`activity|${a.code}`)).test;
+    const byResource = this.resourceTabShown() ? this.resources.activityFilter() : null;
+    const found = new Map<string, { count: number; sort: ReturnType<Column["sortValue"]> }>();
+    for (const a of s.activities) {
+      if ((test && !test(a)) || (byResource && !byResource(a))) continue;
+      const text = col.text(a, ctx);
+      const v = found.get(text);
+      if (v) v.count++;
+      else found.set(text, { count: 1, sort: col.sortValue(a, ctx) });
+    }
+    const values = [...found]
+      .sort(([ta, a], [tb, b]) => compareValues(a.sort, b.sort) || ta.localeCompare(tb, undefined, { numeric: true }))
+      .map(([text, v]) => ({ text, count: v.count }));
+    const refresh = () => {
+      this.grid.syncFilterValues();
+      this.applyFilter();
+    };
+    openColumnFilter(anchor, {
+      column: col,
+      values,
+      condition: this.filterState.columns.get(key) ?? "",
+      ticked: this.filterState.values.get(key) ?? null,
+      onApply: (condition, ticked) => {
+        if (condition.trim()) this.filterState.columns.set(key, condition);
+        else this.filterState.columns.delete(key);
+        if (ticked) this.filterState.values.set(key, ticked);
+        else this.filterState.values.delete(key);
+        refresh();
+      },
+      onClear: () => {
+        this.filterState.columns.delete(key);
+        this.filterState.values.delete(key);
+        refresh();
+      },
+      onSort: (dir) => {
+        this.view.sort = { key, dir };
+        this.rebuild();
+      },
+    });
+  }
+
+  // ---------- Excel export ----------
+
+  /** The grid's columns and rows as an .xlsx: as shown, or with every WBS expanded. */
+  private async exportExcel(allRows: boolean): Promise<void> {
+    const s = this.schedule;
+    if (!s) return;
+    const ctx = this.view.ctx;
+    const rows = allRows ? buildRows(s, { ...this.view, expanded: expandedAll(s) }) : this.rows;
+    if (!rows.length) {
+      this.setStatus("Nothing to export: no rows match the current filters.");
+      return;
+    }
+    const fileName = this.fileName.replace(/\.xer$/i, "") + ".xlsx";
+    // Chrome and Edge can ask where to save; other browsers download it.
+    let handle: FileSystemFileHandle | null = null;
+    const picker = (window as { showSaveFilePicker?: (o: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
+    if (picker) {
+      try {
+        handle = await picker({ suggestedName: fileName, types: [{ description: "Excel workbook", accept: { [XLSX_TYPE]: [".xlsx"] } }] });
+      } catch (e) {
+        if ((e as Error).name === "AbortError") {
+          this.setStatus("Export cancelled.");
+          return;
+        }
+      }
+    }
+    this.setStatus("Building Excel file...");
+    try {
+      const p = s.projects[0];
+      const bytes = await buildActivitiesXlsx({
+        sheetName: p?.shortName || "Activities",
+        columns: this.columns().map((column) => ({ column, width: this.prefs.widths[column.key] ?? column.width })),
+        rows,
+        ctx,
+        wbsColors,
+        info: this.exportInfo(rows, allRows),
+      });
+      if (handle) {
+        const w = await handle.createWritable();
+        await w.write(bytes);
+        await w.close();
+        this.setStatus(`Exported ${rows.length.toLocaleString()} rows to ${handle.name}.`);
+      } else {
+        downloadText(fileName, bytes, XLSX_TYPE);
+        this.setStatus(`Exported ${rows.length.toLocaleString()} rows to ${fileName} (in your Downloads folder).`);
+      }
+    } catch (e) {
+      console.error(e);
+      this.setStatus(`Excel export failed: ${(e as Error).message}`);
+    }
+  }
+
+  /** The "Export Info" sheet: where the rows came from and what was filtered. */
+  private exportInfo(rows: GridRow[], allRows: boolean): [string, string][] {
+    const f = this.filterState;
+    const label = (k: string) => this.view.columns.get(k)?.label ?? k;
+    const columnFilters = [
+      ...[...f.columns].filter(([, v]) => v.trim()).map(([k, v]) => `${label(k)}: ${v}`),
+      ...[...f.values].map(([k, v]) => {
+        const list = [...v].slice(0, 15).map((t) => (t === "" ? "(Blanks)" : t));
+        return `${label(k)} in [${list.join(", ")}${v.size > 15 ? `, ... ${v.size - 15} more` : ""}]`;
+      }),
+    ];
+    const other: string[] = [];
+    if (f.statuses.size) other.push("Status: " + [...f.statuses].join(", "));
+    if (f.criticalOnly) other.push("Critical only");
+    if (f.milestonesOnly) other.push("Milestones only");
+    if (f.commentedOnly) other.push("With comments");
+    if (f.from !== null || f.to !== null) other.push(`Active between ${formatDate(f.from) || "..."} and ${formatDate(f.to) || "..."}`);
+    if (this.resourceTabShown() && this.resources.activityFilter()) other.push(`Resource: ${this.resources.selectionLabel()}`);
+    const p = this.schedule?.projects[0];
+    const sort = this.view.sort;
+    const units = { h: "Hours", d: "Days", w: "Weeks", m: "Months" } as const;
+    return [
+      ["Source file", this.fileName],
+      ["Project", p ? `${p.shortName} - ${p.name}` : ""],
+      ["Data date", p ? formatDate(p.dataDate) : ""],
+      ["Exported", new Date().toLocaleString()],
+      ["Rows", `${rows.length.toLocaleString()} (${rows.filter((r) => r.kind === "act").length.toLocaleString()} activities, ${allRows ? "fully expanded" : "as shown"})`],
+      ["Sort", sort ? `${label(sort.key)} ${sort.dir > 0 ? "ascending" : "descending"}` : "Default (Start, Activity ID)"],
+      ["Column filters", columnFilters.join("; ") || "None"],
+      ["Other filters", other.join("; ") || "None"],
+      ["Duration unit", units[this.view.ctx.unit]],
+      ["WBS band durations", this.prefs.wbsDurations === "working" ? "Working time on the project calendar" : "Calendar weeks"],
+      ["Note", "Dates are exported as Excel dates; P6 actual (A) and constraint (*) markers are not carried across."],
+    ];
+  }
+
   // ---------- Keyboard, drag & drop, status ----------
 
   private installKeys(): void {
@@ -1053,6 +1260,9 @@ export class App {
       } else if (ctrl && k === "o") {
         e.preventDefault();
         this.fileInput.click();
+      } else if (ctrl && k === "e" && FEATURES.excelExport && this.schedule) {
+        e.preventDefault();
+        void this.exportExcel(true);
       } else if (ctrl && k === "s" && FEATURES.embedSave && this.schedule) {
         e.preventDefault();
         void this.saveEmbedded();

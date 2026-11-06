@@ -1,5 +1,5 @@
 // Activity filters: quick filters (status, critical, milestones, date window) plus a
-// per-column expression for each grid column.
+// per-column expression and an optional list of ticked values for each grid column.
 import type { Column, ColumnContext } from "./columns";
 import { isMilestone } from "./format";
 import type { Activity, Status } from "./model";
@@ -16,6 +16,8 @@ export interface FilterState {
   to: number | null;
   /** Column key -> expression typed in the filter row. */
   columns: Map<string, string>;
+  /** Column key -> the displayed values ticked in the column's filter list (header funnel). */
+  values: Map<string, Set<string>>;
   /** Only activities with review comments. */
   commentedOnly: boolean;
 }
@@ -28,6 +30,7 @@ export function emptyFilter(): FilterState {
     from: null,
     to: null,
     columns: new Map(),
+    values: new Map(),
     commentedOnly: false,
   };
 }
@@ -40,7 +43,8 @@ export function filterActive(f: FilterState): boolean {
     f.commentedOnly ||
     f.from !== null ||
     f.to !== null ||
-    [...f.columns.values()].some((v) => v.trim() !== "")
+    [...f.columns.values()].some((v) => v.trim() !== "") ||
+    f.values.size > 0
   );
 }
 
@@ -82,6 +86,10 @@ export function compileFilter(
     const t = columnTest(col, expr, ctx);
     if (t === "error") errors.add(key);
     else tests.push(t);
+  }
+  for (const [key, keep] of f.values) {
+    const col = columns.get(key);
+    if (col) tests.push((a) => keep.has(col.text(a, ctx)));
   }
 
   if (!tests.length) return { test: null, errors };
