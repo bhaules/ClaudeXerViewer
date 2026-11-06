@@ -35,7 +35,9 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
 - `src/xer/rows.ts`: tree -> visible row list (expand state, hide-empty, sort within WBS)
 - `src/ui/`: DOM only. `app.ts` (state + wiring, menus, keys, prefs), `grid.ts`
   (virtualized tree grid), `gantt.ts` (canvas), `relations.ts`, `search.ts`,
-  `menu.ts`, `columns-dialog.ts` (P6-style Columns dialog), `dom.ts` (helpers,
+  `menu.ts`, `toolbar.ts` (icon buttons under the menus; inline SVG icons; call
+  `refresh()` when what a button's enabled/pressed state depends on changes),
+  `columns-dialog.ts` (P6-style Columns dialog), `dom.ts` (helpers,
   splitters, modal), `theme.ts` (colours, row height), `help.ts` (Help > User Guide
   (F1), Keyboard Shortcuts, About)
 - `src/embed.ts`: "Save Viewer with Schedule" (gzip + base64 into a copy of the
@@ -169,7 +171,12 @@ under the mouse on mousedown, or double-click stops working.
   resources filters activities (combined with the other filters in `applyFilter`)
   only while the Resource Usage tab is on screen and its checkbox is ticked; the
   filter bar names it. Clear Filters also resets to All Resources.
-- Filters (View > Filters, Ctrl+Shift+F): a filter bar (status, critical, milestones,
+- Menus: View is grouped (Columns / units / Hide Empty WBS; expand; Filters / Clear
+  Filters / Clear Sort; Toolbar / Gantt Chart / Show on Bottom (P6's name: Relationships,
+  Resource Usage, Comments, None); Relationship Lines / Zoom / Go to Data Date).
+  Right-clicking a column header opens a menu (sort, filter, clear filter, hide,
+  Columns...).
+- Filters (View > Filters, Ctrl+Shift+F, off by default): a filter bar (status, critical, milestones,
   "active between" dates with look-ahead presets from the data date) and a filter row
   under the grid headers. Logic is in `src/xer/filter.ts`; column expressions follow
   `Column.kind` (text: contains / =x / <>x; number and date: > < >= <= = <>; numbers

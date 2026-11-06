@@ -38,11 +38,15 @@ in the same browser.
 
 ## Using it
 
+- **Toolbar**: the everyday commands as buttons under the menus (Open, Save, Export
+  to Excel, Expand/Collapse All, Find, Filters, Gantt and zoom, Add Comment, Help).
+  Hover one for its shortcut. **View > Toolbar** hides it.
 - **WBS**: double-click a band or click its arrow to expand/collapse.
   **View > Expand All / Collapse All / Expand To > Level n**.
 - **Columns**: drag a header edge to resize. Click a header to sort activities
   within each WBS (click again for descending, a third time to reset).
-  **View > Columns...** (or right-click the headers) opens the Columns dialog:
+  Right-click a header to sort, filter or hide that column.
+  **View > Columns...** opens the Columns dialog:
   pick from Available Options and order them under Selected Options. Besides the
   usual P6 columns (dates, durations, float, constraints, duration and % complete
   types, primary resource, WBS code/name, labor and nonlabor units) it offers every
@@ -50,7 +54,7 @@ in the same browser.
   **UDF** with values. Double-click, the arrow buttons, Ctrl/Shift-click and the
   filter box all work as in P6. Code and UDF columns are saved by name, so a layout
   carries over to other files that use them.
-- **Filters** (**View > Filters**, Ctrl+Shift+F): tick statuses, Critical or
+- **Filters** (**View > Filters**, Ctrl+Shift+F; hidden until turned on): tick statuses, Critical or
   Milestones, or pick a date window ("Look ahead..." fills it from the data date).
   Type in the boxes under the column headers: text matches anywhere (`=x` exact,
   `<>x` excludes); numbers and dates take `>`, `<`, `>=`, `<=`, `=`, e.g. `>0` in
@@ -80,7 +84,9 @@ in the same browser.
 - **Relationships**: select an activity to see its predecessors and successors
   (type and lag) below. Double-click one to jump to it.
 - **Find**: Ctrl+F, then Enter / F3 for next and Shift+Enter / Shift+F3 for previous.
-- **Gantt**: Ctrl+mouse wheel to zoom, **View > Zoom to Fit / Go to Data Date**.
+- **Bottom panel**: **View > Show on Bottom** picks Relationships, Resource Usage,
+  Comments or None, like P6.
+- **Gantt**: Ctrl+mouse wheel to zoom, **View > Zoom** and **View > Go to Data Date**.
   Driving relationships are drawn as arrows (red on the critical path). Choose
   **View > Relationship Lines > None / Driving Only / All**. The selected
   activity's lines are drawn thicker.

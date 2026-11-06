@@ -21,6 +21,7 @@ const SECTIONS: Section[] = [
       <ul>
         <li><b>Open a schedule:</b> <b>File &gt; Open</b> (Ctrl+O), or drag a <b>.xer</b> file onto the window.</li>
         <li><b>Saved viewer files</b> (<b>.html</b>) open straight to their schedule when you double-click them. You can also drop one onto a blank viewer.</li>
+        <li>The <b>toolbar</b> under the menus has the everyday commands: Open, Save, Export to Excel, Expand / Collapse All, Find, Filters, Clear Filters, Gantt Chart, Zoom In / Out / to Fit, Go to Data Date, Add Comment and this guide. Hover a button for its name and shortcut. <b>View &gt; Toolbar</b> hides it.</li>
         <li>The title bar shows the project and its <b>data date</b>. The status bar shows what's selected and how many activities and relationships the file has.</li>
         <li>Your choices (columns, widths, units, panels, histogram settings) are remembered in this browser.</li>
       </ul>`,
@@ -43,7 +44,7 @@ const SECTIONS: Section[] = [
     title: "Columns and sorting",
     html: `
       <ul>
-        <li><b>View &gt; Columns...</b>, or right-click the column headers, opens the Columns dialog. Pick from <b>Available Options</b> and order them under <b>Selected Options</b>. Double-click, the arrow buttons, Ctrl/Shift-click and the filter box all work.</li>
+        <li><b>View &gt; Columns...</b> opens the Columns dialog. Pick from <b>Available Options</b> and order them under <b>Selected Options</b>. Double-click, the arrow buttons, Ctrl/Shift-click and the filter box all work.</li>
         <li>Available columns, grouped like P6:
           <ul>
             <li><b>General:</b> Activity ID and Name, Status, Activity Type, Calendar, Duration Type, Percent Complete Type, Primary and Secondary Constraint, Primary Resource, WBS Code, WBS Name, Project.</li>
@@ -58,6 +59,7 @@ const SECTIONS: Section[] = [
         <li>Code and UDF columns are saved by name, so a layout carries over to other files that use the same codes and UDFs.</li>
         <li>Drag the edge of a header to resize a column.</li>
         <li>The <b>funnel</b> on each header opens that column's filter: sort buttons, a condition, and a list of the column's values to tick (see Find and filters).</li>
+        <li><b>Right-click a column header</b> to sort it, filter it, clear its filter, hide it, or open the Columns dialog.</li>
         <li>Click a header to sort activities <b>within each WBS</b>; click again for descending, a third time to go back to the default (Start, then Activity ID). <b>View &gt; Clear Sort</b> also resets it.</li>
         <li><b>View &gt; Duration Unit</b> shows activity durations in hours, days, weeks or months, using each activity's own calendar.</li>
       </ul>`,
@@ -68,7 +70,7 @@ const SECTIONS: Section[] = [
     html: `
       <ul>
         <li><b>Find</b> (Ctrl+F) searches Activity IDs and names. Enter or F3 for the next match, Shift+Enter or Shift+F3 for the previous. Matches are highlighted.</li>
-        <li><b>View &gt; Filters</b> (Ctrl+Shift+F) shows the filter bar and a filter row under the column headers.</li>
+        <li><b>View &gt; Filters</b> (Ctrl+Shift+F) shows the filter bar and a filter row under the column headers. Both are hidden until you turn them on; the column funnels work either way.</li>
         <li><b>Filter bar:</b> tick Not Started / In Progress / Completed, Critical, Milestones or With comments. <b>Active between</b> keeps activities that are underway at any point in a date range; <b>Look ahead</b> fills it from the data date (2 weeks to 3 months).</li>
         <li><b>Filter row:</b> type under any column. Text matches anywhere (<code>=x</code> exact, <code>&lt;&gt;x</code> excludes). Numbers and dates take <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code> <code>=</code>, e.g. <code>&gt;0</code> in Remaining Labor Units or <code>&lt;01-Jul-26</code> in Finish. A plain <code>Jul-26</code> finds any date in July 2026. A red box means the filter wasn't understood. Esc clears a box.</li>
         <li><b>Column funnel:</b> click the funnel on a column header for an Excel-style filter. Tick the values to keep (with how many activities have each; <i>(Blanks)</i> is the empty ones), search the list, type a condition (same as the filter row), or sort the column. The list only shows values left in by the other filters. A filtered column's funnel turns blue.</li>
@@ -90,7 +92,7 @@ const SECTIONS: Section[] = [
         ${swatch(GANTT.dataDate, "line")} Data date
       </p>
       <ul>
-        <li><b>Zoom:</b> Ctrl + mouse wheel over the chart, or <b>View &gt; Zoom In / Zoom Out / Zoom to Fit</b>. <b>Go to Data Date</b> scrolls to the data date.</li>
+        <li><b>Zoom:</b> Ctrl + mouse wheel over the chart, or <b>View &gt; Zoom</b> (In, Out, Zoom to Fit). <b>View &gt; Go to Data Date</b> scrolls to the data date.</li>
         <li><b>Relationship lines</b> (<b>View &gt; Relationship Lines</b>): <b>Driving Only</b> (default) draws the relationships that drive each activity's dates; <b>All</b> adds the rest as dashed lines; <b>None</b> hides them. Lines are red when both ends are critical, and drawn thicker for the selected activity.</li>
         <li>Jumping to an activity (Find, a relationship, a comment) also scrolls the chart to its bar.</li>
         <li><b>View &gt; Gantt Chart</b> hides or shows it; drag the divider to change its width.</li>
@@ -103,7 +105,7 @@ const SECTIONS: Section[] = [
       <ul>
         <li>The <b>Relationships</b> tab at the bottom lists the selected activity's <b>Predecessors</b> and <b>Successors</b> with relationship type (FS/SS/FF/SF), lag, whether it is <b>Driving</b>, dates, float and criticality.</li>
         <li>Double-click a row to jump to that activity. Click a column header to sort.</li>
-        <li><b>View &gt; Bottom Panel</b> hides or shows the bottom panel; drag its top edge to resize it.</li>
+        <li><b>View &gt; Show on Bottom</b> picks what the bottom panel shows (Relationships, Resource Usage or Comments), or <b>None</b> to hide it, like P6. You can also click its tabs; drag its top edge to resize it.</li>
       </ul>`,
   },
   {
@@ -197,7 +199,7 @@ export function showShortcuts(): void {
     ["Enter or double-click", "Expand / collapse WBS"],
     ["Double-click a relationship", "Go to that activity"],
     ["Ctrl+Mouse wheel on Gantt", "Zoom timescale"],
-    ["Right-click column headers", "Columns dialog"],
+    ["Right-click a column header", "Sort, filter or hide that column"],
     ["Funnel on a column header", "Filter or sort that column"],
     ["Esc", "Close a dialog, menu or the Find box; clear a filter box"],
   ];

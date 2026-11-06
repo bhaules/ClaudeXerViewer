@@ -1,6 +1,8 @@
 // Feature switches (replaces the Python app's config.json). Turn a feature off
 // here rather than deleting its code.
 export const FEATURES = {
+  /** Toolbar under the menus (View > Toolbar). */
+  toolbar: true,
   /** Gantt chart to the right of the grid. */
   gantt: true,
   /** Relationship lines on the Gantt (View > Relationship Lines; driving only by default). */

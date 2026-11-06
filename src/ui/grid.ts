@@ -23,8 +23,8 @@ export interface GridHost {
   selectedIndex(): number;
   isHit(row: GridRow): boolean;
   onSort(key: string): void;
-  /** Right-click on the column headers. */
-  onHeaderMenu(): void;
+  /** Right-click on a column header (key null: on the empty header area). */
+  onHeaderMenu(key: string | null, x: number, y: number, cell: HTMLElement | null): void;
   /** Filter row under the headers. */
   filterRow(): boolean;
   filterValue(key: string): string;
@@ -79,7 +79,8 @@ export class Grid {
     this.head.addEventListener("contextmenu", (e) => {
       if ((e.target as HTMLElement).tagName === "INPUT") return; // keep copy/paste in filter boxes
       e.preventDefault();
-      this.host.onHeaderMenu();
+      const cell = (e.target as HTMLElement).closest<HTMLElement>(".hcell");
+      this.host.onHeaderMenu(cell?.dataset.key ?? null, e.clientX, e.clientY, cell);
     });
     this.root = el("div", "pane grid-pane", [this.head, this.body, this.empty]);
 

@@ -42,6 +42,7 @@ import { FilterBar } from "./filterbar";
 import { showAbout, showShortcuts, showUserGuide } from "./help";
 import { Search } from "./search";
 import { wbsColors } from "./theme";
+import { Toolbar, type ToolItem } from "./toolbar";
 
 const PREFS_KEY = "xer-viewer-prefs-v1";
 
@@ -51,6 +52,7 @@ interface Prefs {
   unit: DurationUnit;
   wbsDurations: WbsDurationMode;
   hideEmptyWbs: boolean;
+  showToolbar: boolean;
   showGantt: boolean;
   showRelations: boolean;
   relLines: RelLines;
@@ -74,10 +76,11 @@ const DEFAULT_PREFS: Prefs = {
   unit: "d",
   wbsDurations: "weeks",
   hideEmptyWbs: true,
+  showToolbar: FEATURES.toolbar,
   showGantt: FEATURES.gantt,
   showRelations: FEATURES.relationships,
   relLines: FEATURES.ganttRelationships ? "driving" : "none",
-  showFilters: FEATURES.filters,
+  showFilters: false,
   bottomTab: "relationships",
   histogram: DEFAULT_HISTOGRAM,
   reviewer: "",
@@ -131,6 +134,7 @@ export class App {
   private succs: RelationsPanel;
   private search: Search;
   private menu: MenuBar;
+  private toolbar!: Toolbar;
   private workspace: HTMLElement;
   private welcome: HTMLElement;
   private status = el("div", "left");
@@ -172,7 +176,7 @@ export class App {
       selectedIndex: () => this.selectedIndex(),
       isHit: (r) => r.kind === "act" && this.search.isHit(r.act),
       onSort: (k) => this.toggleSort(k),
-      onHeaderMenu: () => this.openColumnsDialog(),
+      onHeaderMenu: (k, x, y, cell) => this.headerMenu(k, x, y, cell),
       filterRow: () => FEATURES.filters && this.prefs.showFilters,
       filterValue: (k) => this.filterState.columns.get(k) ?? "",
       filterError: (k) => this.compiled.errors.has(k),
@@ -326,6 +330,7 @@ export class App {
       if (files.length) void this.importComments(files);
     });
 
+    this.toolbar = new Toolbar(this.toolItems());
     this.appRoot = mount;
     this.filterBar = new FilterBar({
       state: () => this.filterState,
@@ -335,6 +340,7 @@ export class App {
     });
     mount.append(
       this.menu.root,
+      this.toolbar.root,
       this.filterBar.root,
       this.workspace,
       this.welcome,
@@ -474,6 +480,7 @@ export class App {
     if (!row) return;
     this.selected = row.kind === "wbs" ? row.wbs : row.act;
     this.grid.updateSelection();
+    this.toolbar.refresh();
     this.grid.scrollToIndex(i);
     // Don't wait for the grid's scroll event to bring the Gantt along.
     this.gantt.scrollTop = this.grid.scrollTop;
@@ -527,6 +534,11 @@ export class App {
     const s = this.view.sort;
     // Ascending -> descending -> back to the default order.
     this.view.sort = s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null;
+    this.rebuild();
+  }
+
+  private clearSort(): void {
+    this.view.sort = null;
     this.rebuild();
   }
 
@@ -586,11 +598,10 @@ export class App {
       ["weeks", "Calendar Weeks"],
       ["working", "Working Time (in Duration Unit)"],
     ];
-    const items: MenuItem[] = [
-      { label: "Expand All", enabled: loaded, action: () => this.setExpanded(expandedAll(s())) },
-      { label: "Collapse All", enabled: loaded, action: () => this.setExpanded(new Set()) },
-      { label: "Expand To", enabled: loaded, items: () => levels },
-      "-",
+    // Grouped like P6: what the grid shows, the WBS tree, filter and sort, panels, Gantt.
+    const items: MenuItem[] = [];
+    if (FEATURES.columnChooser) items.push({ label: "Columns...", action: () => this.openColumnsDialog() });
+    items.push(
       {
         label: "Duration Unit",
         items: () =>
@@ -627,29 +638,6 @@ export class App {
             },
           })),
       },
-    ];
-    if (FEATURES.columnChooser) {
-      items.push({ label: "Columns...", action: () => this.openColumnsDialog() });
-    }
-    if (FEATURES.sorting) {
-      items.push({
-        label: "Clear Sort",
-        enabled: () => this.view.sort !== null,
-        action: () => {
-          this.view.sort = null;
-          this.rebuild();
-        },
-      });
-    }
-    if (FEATURES.filters) {
-      items.push(
-        "-",
-        { label: "Filters", key: "Ctrl+Shift+F", checked: () => this.prefs.showFilters, enabled: loaded, action: () => this.toggleFilters() },
-        { label: "Clear Filters", enabled: () => this.compiled.test !== null, action: () => this.clearFilters() },
-      );
-    }
-    items.push(
-      "-",
       {
         label: "Hide Empty WBS",
         checked: () => this.view.hideEmptyWbs,
@@ -660,9 +648,37 @@ export class App {
           this.rebuild();
         },
       },
+      "-",
+      { label: "Expand All", enabled: loaded, action: () => this.setExpanded(expandedAll(s())) },
+      { label: "Collapse All", enabled: loaded, action: () => this.setExpanded(new Set()) },
+      { label: "Expand To", enabled: loaded, items: () => levels },
     );
+    const filterSort: MenuItem[] = [];
+    if (FEATURES.filters) {
+      filterSort.push(
+        { label: "Filters", key: "Ctrl+Shift+F", checked: () => this.prefs.showFilters, enabled: loaded, action: () => this.toggleFilters() },
+        { label: "Clear Filters", enabled: () => this.compiled.test !== null, action: () => this.clearFilters() },
+      );
+    }
+    if (FEATURES.sorting) {
+      filterSort.push({ label: "Clear Sort", enabled: () => this.view.sort !== null, action: () => this.clearSort() });
+    }
+    if (filterSort.length) items.push("-", ...filterSort);
+
+    const panels: MenuItem[] = [];
+    if (FEATURES.toolbar) {
+      panels.push({
+        label: "Toolbar",
+        checked: () => this.prefs.showToolbar,
+        action: () => {
+          this.prefs.showToolbar = !this.prefs.showToolbar;
+          this.savePrefs();
+          this.applyPanelVisibility();
+        },
+      });
+    }
     if (FEATURES.gantt) {
-      items.push({
+      panels.push({
         label: "Gantt Chart",
         checked: () => this.prefs.showGantt,
         action: () => {
@@ -673,56 +689,54 @@ export class App {
       });
     }
     if (FEATURES.relationships) {
-      items.push({
-        label: "Bottom Panel",
-        checked: () => this.prefs.showRelations,
-        action: () => {
-          this.prefs.showRelations = !this.prefs.showRelations;
-          this.savePrefs();
-          this.applyPanelVisibility();
-          const sel = this.selected;
-          this.showRelations(sel && isActivity(sel) ? sel : null);
-          // The resource filter only applies while its tab is on screen.
-          this.applyFilter();
-        },
+      // P6's "Show on Bottom": which tab the bottom panel shows, or none.
+      const tabs: [BottomTab, string][] = [["relationships", "Relationships"]];
+      if (FEATURES.resourceHistogram) tabs.push(["resources", "Resource Usage"]);
+      if (FEATURES.comments) tabs.push(["comments", "Comments"]);
+      panels.push({
+        label: "Show on Bottom",
+        items: () => [
+          ...tabs.map(([t, label]): MenuItem => ({
+            label,
+            checked: () => this.prefs.showRelations && this.prefs.bottomTab === t,
+            action: () => this.showBottom(t),
+          })),
+          "-",
+          { label: "None", checked: () => !this.prefs.showRelations, action: () => this.showBottom(null) },
+        ],
       });
-      if (FEATURES.resourceHistogram) {
+    }
+    if (panels.length) items.push("-", ...panels);
+
+    if (FEATURES.gantt) {
+      items.push("-");
+      if (FEATURES.ganttRelationships) {
+        const modes: [RelLines, string][] = [["none", "None"], ["driving", "Driving Only"], ["all", "All"]];
         items.push({
-          label: "Resource Usage",
-          checked: () => this.prefs.showRelations && this.prefs.bottomTab === "resources",
-          action: () => {
-            if (!this.prefs.showRelations) {
-              this.prefs.showRelations = true;
-              this.applyPanelVisibility();
-            }
-            this.setBottomTab(this.prefs.bottomTab === "resources" && this.prefs.showRelations ? "relationships" : "resources");
-          },
+          label: "Relationship Lines",
+          items: () =>
+            modes.map(([m, label]) => ({
+              label,
+              checked: () => this.prefs.relLines === m,
+              action: () => {
+                this.prefs.relLines = m;
+                this.savePrefs();
+                this.updateRelLines();
+                this.gantt.draw();
+              },
+            })),
         });
       }
-    }
-    if (FEATURES.gantt && FEATURES.ganttRelationships) {
-      const modes: [RelLines, string][] = [["none", "None"], ["driving", "Driving Only"], ["all", "All"]];
-      items.push({
-        label: "Relationship Lines",
-        items: () =>
-          modes.map(([m, label]) => ({
-            label,
-            checked: () => this.prefs.relLines === m,
-            action: () => {
-              this.prefs.relLines = m;
-              this.savePrefs();
-              this.updateRelLines();
-              this.gantt.draw();
-            },
-          })),
-      });
-    }
-    if (FEATURES.gantt) {
       items.push(
-        "-",
-        { label: "Zoom In", key: "Ctrl+Wheel", enabled: loaded, action: () => this.gantt.zoom(1.5) },
-        { label: "Zoom Out", enabled: loaded, action: () => this.gantt.zoom(1 / 1.5) },
-        { label: "Zoom to Fit", enabled: loaded, action: () => this.gantt.fit() },
+        {
+          label: "Zoom",
+          enabled: loaded,
+          items: () => [
+            { label: "Zoom In", key: "Ctrl+Wheel", action: () => this.gantt.zoom(1.5) },
+            { label: "Zoom Out", action: () => this.gantt.zoom(1 / 1.5) },
+            { label: "Zoom to Fit", action: () => this.gantt.fit() },
+          ],
+        },
         {
           label: "Go to Data Date",
           enabled: () => !!this.schedule?.projects[0]?.dataDate,
@@ -730,6 +744,65 @@ export class App {
         },
       );
     }
+    return items;
+  }
+
+  /** The toolbar's buttons: the commands people reach for most, in menu order. */
+  private toolItems(): ToolItem[] {
+    const loaded = () => this.schedule !== null;
+    const s = () => this.schedule!;
+    const items: ToolItem[] = [{ icon: "open", title: "Open (Ctrl+O)", action: () => this.fileInput.click() }];
+    if (FEATURES.embedSave) {
+      items.push({ icon: "save", title: "Save Viewer with Schedule (Ctrl+S)", enabled: loaded, action: () => void this.saveEmbedded() });
+    }
+    if (FEATURES.excelExport) {
+      items.push({ icon: "excel", title: "Export All Rows to Excel (Ctrl+E)", enabled: loaded, action: () => void this.exportExcel(true) });
+    }
+    items.push(
+      "-",
+      { icon: "expand", title: "Expand All", enabled: loaded, action: () => this.setExpanded(expandedAll(s())) },
+      { icon: "collapse", title: "Collapse All", enabled: loaded, action: () => this.setExpanded(new Set()) },
+    );
+    if (FEATURES.search) items.push("-", { icon: "find", title: "Find (Ctrl+F)", enabled: loaded, action: () => this.search.open() });
+    if (FEATURES.filters) {
+      items.push(
+        { icon: "filter", title: "Filters (Ctrl+Shift+F)", enabled: loaded, pressed: () => this.prefs.showFilters, action: () => this.toggleFilters() },
+        { icon: "clearFilter", title: "Clear Filters", enabled: () => this.compiled.test !== null, action: () => this.clearFilters() },
+      );
+    }
+    if (FEATURES.gantt) {
+      items.push(
+        "-",
+        {
+          icon: "gantt",
+          title: "Gantt Chart",
+          pressed: () => this.prefs.showGantt,
+          action: () => {
+            this.prefs.showGantt = !this.prefs.showGantt;
+            this.savePrefs();
+            this.applyPanelVisibility();
+          },
+        },
+        { icon: "zoomIn", title: "Zoom In (Ctrl+Wheel)", enabled: () => loaded() && this.prefs.showGantt, action: () => this.gantt.zoom(1.5) },
+        { icon: "zoomOut", title: "Zoom Out", enabled: () => loaded() && this.prefs.showGantt, action: () => this.gantt.zoom(1 / 1.5) },
+        { icon: "fit", title: "Zoom to Fit", enabled: () => loaded() && this.prefs.showGantt, action: () => this.gantt.fit() },
+        {
+          icon: "dataDate",
+          title: "Go to Data Date",
+          enabled: () => this.prefs.showGantt && !!this.schedule?.projects[0]?.dataDate,
+          action: () => this.gantt.scrollToDate(this.schedule!.projects[0].dataDate!),
+        },
+      );
+    }
+    if (FEATURES.comments) {
+      items.push("-", {
+        icon: "comment",
+        title: "Add Comment on the Selected Row (Ctrl+M)",
+        enabled: () => loaded() && !!this.selected,
+        action: () => void this.addComment(this.selected),
+      });
+    }
+    items.push("-", { icon: "help", title: "User Guide (F1)", action: () => showUserGuide() });
     return items;
   }
 
@@ -748,18 +821,67 @@ export class App {
       available: [...this.view.columns.values()],
       selected: this.columns().map((c) => c.key),
       defaults: DEFAULT_PREFS.columns,
-      onApply: (keys) => {
-        // Keep saved UDF columns this file doesn't have, so they come back for files that do.
-        const missing = this.prefs.columns.filter((k) => !this.view.columns.has(k));
-        this.prefs.columns = [...keys, ...missing];
-        this.savePrefs();
-        // A sort or filter on a removed column would be invisible; drop it.
-        if (this.view.sort && !keys.includes(this.view.sort.key)) this.view.sort = null;
-        for (const k of [...this.filterState.columns.keys()]) if (!keys.includes(k)) this.filterState.columns.delete(k);
-        for (const k of [...this.filterState.values.keys()]) if (!keys.includes(k)) this.filterState.values.delete(k);
-        this.applyFilter();
-      },
+      onApply: (keys) => this.setColumns(keys),
     });
+  }
+
+  /** Shows these columns, in this order. */
+  private setColumns(keys: string[]): void {
+    // Keep saved UDF and code columns this file doesn't have, so they come back for files that do.
+    const missing = this.prefs.columns.filter((k) => !this.view.columns.has(k));
+    this.prefs.columns = [...keys, ...missing];
+    this.savePrefs();
+    // A sort or filter on a removed column would be invisible; drop it.
+    if (this.view.sort && !keys.includes(this.view.sort.key)) this.view.sort = null;
+    for (const k of [...this.filterState.columns.keys()]) if (!keys.includes(k)) this.filterState.columns.delete(k);
+    for (const k of [...this.filterState.values.keys()]) if (!keys.includes(k)) this.filterState.values.delete(k);
+    this.grid.syncFilterValues();
+    this.applyFilter();
+  }
+
+  /** Right-click on a column header: sort, filter or hide that column. */
+  private headerMenu(key: string | null, x: number, y: number, cell: HTMLElement | null): void {
+    const col = key ? this.view.columns.get(key) : undefined;
+    const items: MenuItem[] = [];
+    if (key && col && this.schedule) {
+      const sorted = (dir: 1 | -1) => this.view.sort?.key === key && this.view.sort.dir === dir;
+      const sortBy = (dir: 1 | -1) => {
+        this.view.sort = { key, dir };
+        this.rebuild();
+      };
+      if (FEATURES.sorting) {
+        items.push(
+          { label: col.kind === "text" ? "Sort A to Z" : "Sort Smallest to Largest", checked: () => sorted(1), action: () => sortBy(1) },
+          { label: col.kind === "text" ? "Sort Z to A" : "Sort Largest to Smallest", checked: () => sorted(-1), action: () => sortBy(-1) },
+          { label: "Clear Sort", enabled: () => this.view.sort !== null, action: () => this.clearSort() },
+          "-",
+        );
+      }
+      if (FEATURES.filters && cell) {
+        items.push(
+          { label: "Filter This Column...", action: () => this.openColumnFilter(key, cell.querySelector<HTMLElement>(".hf") ?? cell) },
+          {
+            label: "Clear Filter on This Column",
+            enabled: () => !!this.filterState.columns.get(key)?.trim() || this.filterState.values.has(key),
+            action: () => {
+              this.filterState.columns.delete(key);
+              this.filterState.values.delete(key);
+              this.grid.syncFilterValues();
+              this.applyFilter();
+            },
+          },
+          "-",
+        );
+      }
+      const shown = this.columns().map((c) => c.key);
+      items.push({
+        label: `Hide "${col.label}"`,
+        enabled: () => shown.length > 1,
+        action: () => this.setColumns(shown.filter((k) => k !== key)),
+      });
+    }
+    if (FEATURES.columnChooser) items.push({ label: "Columns...", action: () => this.openColumnsDialog() });
+    if (items.length) popupMenu(items, x, y);
   }
 
   // ---------- Review comments ----------
@@ -950,11 +1072,24 @@ export class App {
   }
 
   private showCommentsTab(): void {
-    if (!this.prefs.showRelations) {
-      this.prefs.showRelations = true;
+    this.showBottom("comments");
+  }
+
+  /** View > Show on Bottom: a tab of the bottom panel, or null to hide the panel. */
+  private showBottom(tab: BottomTab | null): void {
+    const show = tab !== null;
+    if (show !== this.prefs.showRelations) {
+      this.prefs.showRelations = show;
       this.applyPanelVisibility();
+      const sel = this.selected;
+      this.showRelations(sel && isActivity(sel) ? sel : null);
     }
-    this.setBottomTab("comments");
+    if (tab) {
+      this.setBottomTab(tab);
+    } else {
+      this.savePrefs();
+      this.applyFilter(); // the resource filter only applies while its tab is on screen
+    }
   }
 
   /** Selects a WBS band, expanding its parents. */
@@ -992,6 +1127,7 @@ export class App {
     this.filterBar.setCount(shown, s.activities.length, test !== null, note);
     this.grid.setEmptyMessage(test && shown === 0 ? "No activities match the current filters." : null);
     this.filterStatus(test ? shown : null);
+    this.toolbar.refresh();
   }
 
   /**
@@ -1077,6 +1213,8 @@ export class App {
     this.resSplit.classList.toggle("hidden", !g);
     if (r) this.applyBottomTab();
     if (g) this.gantt.update();
+    this.toolbar.root.classList.toggle("hidden", !(FEATURES.toolbar && this.prefs.showToolbar));
+    this.toolbar.refresh();
   }
 
   private async saveEmbedded(): Promise<void> {
