@@ -6,12 +6,13 @@ nothing to install. The schedule is read inside the browser and never uploaded.
 
 ## Sharing a schedule (instead of a PDF)
 
-1. Open `dist/xer-viewer.html` in Chrome or Edge.
+1. Open `xer-viewer-v<version>.html` (from the Releases page, or `dist/` after a build)
+   in Chrome or Edge. **Help > About** shows the version.
 2. Drag your `.xer` onto the window, or use **File > Open** (Ctrl+O).
 3. **File > Save Viewer with Schedule** (Ctrl+S) saves `<schedule>.html`.
 4. Send that one file. The recipient double-clicks it and the schedule opens.
 
-You can also send `xer-viewer.html` together with a `.xer` file and let people
+You can also send the viewer file together with a `.xer` file and let people
 open the `.xer` themselves.
 
 ## Getting review comments back
@@ -91,13 +92,16 @@ in the same browser.
   **View > Relationship Lines > None / Driving Only / All**. The selected
   activity's lines are drawn thicker.
 - **Durations**: **View > Duration Unit** (hours, days, weeks, months), converted
-  with each activity's calendar. WBS bands work theirs out from their summarised
-  start and finish: **View > WBS Band Durations** shows them in **Calendar Weeks**
-  (default) or as **Working Time** on the project calendar, in the Duration Unit.
+  with each activity's calendar. WBS bands show the working time on the project
+  calendar between their summarised start and finish (remaining: from the data date),
+  in the same unit.
 
 Column choices, widths and units are remembered per browser.
 
 ## Development
+
+The version number is `version` in `package.json`. It goes into the built file's name
+and Help > About, so bump it before building a release.
 
 Needs Node 20+.
 
@@ -105,7 +109,7 @@ Needs Node 20+.
 npm install
 npm run dev        # http://localhost:5173/?file=/tests/fixtures/sample.xer
 npm test
-npm run build      # -> dist/xer-viewer.html
+npm run build      # -> dist/xer-viewer-v<version>.html
 ```
 
 Put real `.xer` files in the project root to have `npm test` check them too

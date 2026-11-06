@@ -2,7 +2,7 @@
 import { buildEmbeddedHtml, downloadText, extractEmbeddedXer } from "../embed";
 import { FEATURES } from "../features";
 import { loadSchedule } from "../xer";
-import { COLUMN_BY_KEY, COLUMNS, scheduleColumns, type Column, type WbsDurationMode } from "../xer/columns";
+import { COLUMN_BY_KEY, COLUMNS, scheduleColumns, type Column } from "../xer/columns";
 import {
   extractCommentsFromHtml,
   liveComments,
@@ -50,7 +50,6 @@ interface Prefs {
   columns: string[];
   widths: Record<string, number>;
   unit: DurationUnit;
-  wbsDurations: WbsDurationMode;
   hideEmptyWbs: boolean;
   showToolbar: boolean;
   showGantt: boolean;
@@ -74,7 +73,6 @@ const DEFAULT_PREFS: Prefs = {
   columns: COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key),
   widths: {},
   unit: "d",
-  wbsDurations: "weeks",
   hideEmptyWbs: true,
   showToolbar: FEATURES.toolbar,
   showGantt: FEATURES.gantt,
@@ -118,7 +116,7 @@ export class App {
     expanded: new Set(),
     hideEmptyWbs: this.prefs.hideEmptyWbs,
     sort: null,
-    ctx: { unit: this.prefs.unit, wbsDurations: this.prefs.wbsDurations },
+    ctx: { unit: this.prefs.unit },
     columns: new Map(COLUMNS.map((c) => [c.key, c])),
     filter: null,
   };
@@ -594,10 +592,6 @@ export class App {
       action: () => this.setExpanded(expandedToLevel(s(), n)),
     }));
     const units: [DurationUnit, string][] = [["h", "Hours"], ["d", "Days"], ["w", "Weeks"], ["m", "Months"]];
-    const wbsModes: [WbsDurationMode, string][] = [
-      ["weeks", "Calendar Weeks"],
-      ["working", "Working Time (in Duration Unit)"],
-    ];
     // Grouped like P6: what the grid shows, the WBS tree, filter and sort, panels, Gantt.
     const items: MenuItem[] = [];
     if (FEATURES.columnChooser) items.push({ label: "Columns...", action: () => this.openColumnsDialog() });
@@ -621,20 +615,6 @@ export class App {
               this.grid.render();
               this.preds.render();
               this.succs.render();
-            },
-          })),
-      },
-      {
-        label: "WBS Band Durations",
-        items: () =>
-          wbsModes.map(([m, label]) => ({
-            label,
-            checked: () => this.prefs.wbsDurations === m,
-            action: () => {
-              this.prefs.wbsDurations = m;
-              this.view.ctx = { ...this.view.ctx, wbsDurations: m };
-              this.savePrefs();
-              this.grid.render();
             },
           })),
       },
@@ -1220,7 +1200,7 @@ export class App {
   private async saveEmbedded(): Promise<void> {
     if (!this.fileBytes) return;
     if (import.meta.env.DEV) {
-      modal("Not available in dev mode", "<p>Run <code>npm run build</code> and use <code>dist/xer-viewer.html</code> to save a viewer with the schedule inside.</p>");
+      modal("Not available in dev mode", "<p>Run <code>npm run build</code> and use <code>dist/xer-viewer-v*.html</code> to save a viewer with the schedule inside.</p>");
       return;
     }
     const html = await buildEmbeddedHtml({ name: this.fileName, bytes: this.fileBytes }, this.comments);
@@ -1381,7 +1361,7 @@ export class App {
       ["Column filters", columnFilters.join("; ") || "None"],
       ["Other filters", other.join("; ") || "None"],
       ["Duration unit", units[this.view.ctx.unit]],
-      ["WBS band durations", this.prefs.wbsDurations === "working" ? "Working time on the project calendar" : "Calendar weeks"],
+      ["Exported with", `XER Viewer ${__APP_VERSION__}`],
       ["Note", "Dates are exported as Excel dates; P6 actual (A) and constraint (*) markers are not carried across."],
     ];
   }
@@ -1470,6 +1450,7 @@ export class App {
         open,
         el("p", "", ["or drag and drop a .xer file anywhere on this window"]),
         el("p", "note", ["Your file stays on this computer. Nothing is uploaded."]),
+        el("p", "note", [`Version ${__APP_VERSION__}`]),
         guide,
       ]),
     ]);

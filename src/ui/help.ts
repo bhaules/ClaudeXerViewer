@@ -34,7 +34,7 @@ const SECTIONS: Section[] = [
         <li>Activities are grouped by <b>WBS</b>. Click a band's arrow, double-click it, or press → / ← to expand or collapse it.</li>
         <li><b>View &gt; Expand All</b>, <b>Collapse All</b> and <b>Expand To &gt; Level n</b> open the whole tree to a level.</li>
         <li>Move with ↑ ↓, Page Up/Down, Home and End. ← on an activity jumps up to its WBS band.</li>
-        <li>WBS bands show the summarised <b>Start</b> and <b>Finish</b>, the lowest <b>Total Float</b> and labour totals. Their <b>Original / Remaining Duration</b> is worked out from those summarised dates (remaining runs from the data date), not added up from the activities. <b>View &gt; WBS Band Durations</b> picks how: <b>Calendar Weeks</b> (default) or <b>Working Time</b>, the working hours on the project calendar between those dates, shown in the Duration Unit like the activities.</li>
+        <li>WBS bands show the summarised <b>Start</b> and <b>Finish</b>, the lowest <b>Total Float</b> and labour totals. Their <b>Original Duration</b> is the working time on the project calendar between the band's summarised Start and Finish; <b>Remaining Duration</b> is the same from the data date (0 once everything under it is complete). They are not added up from the activities, so overlapping activities aren't counted twice. Both show in the Duration Unit, like the activities.</li>
         <li>Dates follow P6: <b>A</b> after a date means actual; <b>*</b> means a constraint applies.</li>
         <li><b>View &gt; Hide Empty WBS</b> hides bands with no activities under them.</li>
       </ul>`,
@@ -209,7 +209,7 @@ export function showShortcuts(): void {
 export function showAbout(): void {
   modal(
     "About XER Viewer",
-    `<p><b>XER Viewer</b>: a read-only viewer for Primavera P6 .xer files, in a single HTML file.</p>
+    `<p><b>XER Viewer</b> ${__APP_VERSION__}: a read-only viewer for Primavera P6 .xer files, in a single HTML file.</p>
      <p>Your file is read inside this browser window. Nothing is uploaded or sent anywhere.</p>
      <p>Source and downloads: <b>github.com/bhaules/ClaudeXerViewer</b></p>`,
   );

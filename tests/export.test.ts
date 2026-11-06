@@ -41,10 +41,10 @@ describe("column value filters", () => {
   });
 });
 
-describe("WBS band durations as working time", () => {
+describe("WBS band durations", () => {
   const root = schedule.projects[0].root; // 06-Jan-25 08:00 to 13-Mar-25 08:00, data date 03-Feb-25 08:00
   const con = root.children[1]; // 24-Feb-25 07:00 to 12-Mar-25 17:00
-  const working = { unit: "d" as const, wbsDurations: "working" as const };
+  const working = { unit: "d" as const };
 
   it("counts working hours on the project calendar between the summarised dates", () => {
     // 8h Mon-Fri: 24-28 Feb, 3-7 Mar and 10-12 Mar are 13 working days.
@@ -56,9 +56,9 @@ describe("WBS band durations as working time", () => {
     expect(cols.get("remDur")!.wbsText(root, { ...working, unit: "h" })).toBe("216h");
   });
 
-  it("has nothing remaining once complete, and weeks stay the default", () => {
+  it("has nothing remaining once complete", () => {
     expect(wbsWorkHours({ ...con, finishActual: true }, true)).toBe(0);
-    expect(cols.get("origDur")!.wbsText(root, { unit: "d" })).toBe("9.4w");
+    expect(cols.get("remDur")!.wbsText({ ...con, finishActual: true }, working)).toBe("0d");
   });
 });
 

@@ -21,13 +21,8 @@ import {
   type DurationUnit,
 } from "./format";
 
-/** How WBS bands show Original / Remaining Duration (View > WBS Band Durations). */
-export type WbsDurationMode = "weeks" | "working";
-
 export interface ColumnContext {
   unit: DurationUnit;
-  /** Defaults to "weeks". */
-  wbsDurations?: WbsDurationMode;
 }
 
 export type SortValue = number | string | null;
@@ -56,29 +51,13 @@ const STATUS_NAMES = { NotStarted: "Not Started", InProgress: "In Progress", Com
 
 const wbsCal = (w: Wbs) => w.project?.calendar ?? FALLBACK_CAL;
 
-const WEEK_MS = 7 * 86_400_000;
-
-/**
- * WBS band durations in calendar weeks from the band's summarised dates, ignoring the
- * activities' own durations. Remaining runs from the later of the start and the data
- * date; a band whose activities are all complete has 0w remaining.
- */
-export function wbsWeeks(w: Wbs, remaining: boolean): number | null {
-  if (w.start === null || w.finish === null) return null;
-  if (!remaining) return Math.max(0, w.finish - w.start) / WEEK_MS;
-  if (w.finishActual) return 0;
-  const from = Math.max(w.start, w.project?.dataDate ?? w.start);
-  return Math.max(0, w.finish - from) / WEEK_MS;
-}
-
-const formatWeeks = (weeks: number | null) => (weeks === null ? "" : formatNumber(weeks, 1) + "w");
-
 const workCache = new Map<string, number>();
 
 /**
- * The other WBS band duration mode: working hours on the project calendar between the
- * band's summarised dates (remaining from the later of the start and the data date).
- * Cached, since bands are redrawn on every scroll.
+ * WBS band Original / Remaining Duration: the working hours on the project calendar
+ * between the band's summarised start and finish, ignoring the activities' own
+ * durations. Remaining runs from the later of the start and the data date; a band whose
+ * activities are all complete has 0 remaining. Cached, since bands redraw on every scroll.
  */
 export function wbsWorkHours(w: Wbs, remaining: boolean): number | null {
   if (w.start === null || w.finish === null) return null;
@@ -97,8 +76,7 @@ export function wbsWorkHours(w: Wbs, remaining: boolean): number | null {
 }
 
 function wbsDuration(w: Wbs, ctx: ColumnContext, remaining: boolean): string {
-  if (ctx.wbsDurations === "working") return formatDuration(wbsWorkHours(w, remaining), wbsCal(w), ctx.unit);
-  return formatWeeks(wbsWeeks(w, remaining));
+  return formatDuration(wbsWorkHours(w, remaining), wbsCal(w), ctx.unit);
 }
 
 const durationColumn = (

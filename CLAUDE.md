@@ -11,7 +11,10 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
 ## Commands
 - `npm run dev`: dev server. Drop a .xer on the page, or open
   `http://localhost:5173/?file=/tests/fixtures/sample.xer` to auto-load the fixture.
-- `npm run build`: typecheck + build `dist/xer-viewer.html` (everything inlined)
+- `npm run build`: typecheck + build `dist/xer-viewer-v<version>.html` (everything inlined).
+  The version is `package.json` `version`, also shown as `__APP_VERSION__` (Help > About,
+  welcome screen, Excel Export Info). Bump it for each release; the release tag is
+  `v<version>` and the asset keeps the versioned file name.
 - `npm test`: Vitest (parser/model). `tests/real-files.test.ts` also parses any
   `*.xer` in the project root and is skipped when there are none.
 - `npm run typecheck`
@@ -139,10 +142,10 @@ under the mouse on mousedown, or double-click stops working.
 - WBS band rows: bold, colour by level (P6/Python palette in `src/ui/theme.ts`),
   white text on the dark levels, rolled-up start/finish and min total float.
   Band Original / Remaining Duration come from the band's summarised dates, never from
-  activity durations: finish - start, and finish - max(start, data date) (0 when all
-  complete). View > WBS Band Durations (`ColumnContext.wbsDurations`, saved in prefs):
-  "weeks" (default, `wbsWeeks`, calendar weeks) or "working" (`wbsWorkHours`, working
-  hours on the project calendar, shown in the Duration Unit; cached).
+  activity durations (`wbsWorkHours`): working hours on the project calendar from start
+  to finish, and from max(start, data date) to finish (0 when all complete), shown in
+  the Duration Unit with the project calendar's hours per day. Cached per calendar and
+  date pair.
 - Dates `dd-Mmm-yy`; suffix ` A` for actuals, `*` when a constraint applies.
 - Under each WBS band: its own activities first, then its child WBS bands.
 - Sorting reorders activities WITHIN their WBS; WBS stay in seq_num order.

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { loadSchedule } from "../src/xer";
 import { hasWorkBetween, parseCalendarData } from "../src/xer/calendar";
-import { scheduleColumns, wbsWeeks } from "../src/xer/columns";
+import { scheduleColumns } from "../src/xer/columns";
 import { formatDate, formatDuration } from "../src/xer/format";
 import { compileFilter, emptyFilter, parseDateInput, parseNumber, type FilterState } from "../src/xer/filter";
 import { applyRollups, parseXerDate } from "../src/xer/model";
@@ -166,16 +166,12 @@ describe("labor units and UDF columns", () => {
     expect(cols.get("budLabor")!.wbsText(schedule.projects[0].root, ctx)).toBe("500.5h");
   });
 
-  it("gives WBS bands durations in weeks from their summarised dates", () => {
+  it("gives WBS bands durations in working time between their summarised dates", () => {
     const root = schedule.projects[0].root; // 06-Jan-25 08:00 to 13-Mar-25 08:00, data date 03-Feb-25 08:00
-    expect(cols.get("origDur")!.wbsText(root, ctx)).toBe("9.4w"); // 66 days
-    expect(cols.get("remDur")!.wbsText(root, ctx)).toBe("5.4w"); // 38 days from the data date
-    const con = root.children[1]; // 24-Feb-25 07:00 to 12-Mar-25 17:00, all after the data date
-    expect(wbsWeeks(con, false)).toBeCloseTo((16 + 10 / 24) / 7);
-    expect(wbsWeeks(con, true)).toBe(wbsWeeks(con, false));
-    // Shown in weeks whatever the duration unit, and complete bands have nothing remaining.
-    expect(cols.get("origDur")!.wbsText(root, { unit: "h" })).toBe("9.4w");
-    expect(wbsWeeks({ ...con, finishActual: true }, true)).toBe(0);
+    // Project calendar 8h Mon-Fri with 10-Feb a holiday: 6-Jan to 12-Mar is 48 weekdays, less 1.
+    expect(cols.get("origDur")!.wbsText(root, ctx)).toBe("47d");
+    expect(cols.get("remDur")!.wbsText(root, ctx)).toBe("27d"); // from the data date
+    expect(cols.get("origDur")!.wbsText(root, { unit: "h" })).toBe("376h");
   });
 
   it("offers only activity UDFs that have values, by label", () => {
