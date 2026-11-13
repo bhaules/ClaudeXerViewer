@@ -3,6 +3,12 @@
 All notable changes to XER Viewer. Each version is a GitHub release with the viewer
 attached as `xer-viewer-v<version>.html` (`xer-viewer.html` before 0.6.0).
 
+## 0.6.2 (2026-11-13)
+
+### Added
+- **Tab icon.** The page has its own icon (a small Gantt chart), so it is easy to spot in
+  pinned tabs and bookmarks. It is built into the file and works offline.
+
 ## 0.6.1 (2026-11-13)
 
 ### Changed
