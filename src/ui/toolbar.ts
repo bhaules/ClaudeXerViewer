@@ -7,7 +7,8 @@ export type ToolItem =
   | {
       icon: keyof typeof ICONS;
       title: string;
-      action: () => void;
+      /** Gets the button, e.g. to open a menu under it. */
+      action: (button: HTMLElement) => void;
       enabled?: () => boolean;
       /** Toggle buttons draw pressed while this is true. */
       pressed?: () => boolean;
@@ -51,7 +52,7 @@ export class Toolbar {
       b.addEventListener("mousedown", (e) => e.preventDefault());
       b.addEventListener("click", () => {
         if (item.enabled && !item.enabled()) return;
-        item.action();
+        item.action(b);
         this.refresh();
       });
       this.buttons.push([b, item]);

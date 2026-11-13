@@ -153,6 +153,34 @@ export function columnTest(col: Column, expr: string, ctx: ColumnContext): Predi
   return (a) => text(a).includes(needle);
 }
 
+/**
+ * For simple lists such as the resource list: text contains / "=x" / "<>x"; numbers take
+ * > < >= <= = <> (a plain number means equals, to the nearest whole number shown).
+ */
+export function valueTest(kind: "text" | "number", expr: string): ((v: string | number) => boolean) | "error" {
+  const e = expr.trim();
+  const m = /^(>=|<=|<>|!=|=|>|<|!)\s*(.*)$/.exec(e);
+  const op = m ? ((m[1] === "!=" || m[1] === "!" ? "<>" : m[1]) as Op) : null;
+  const operand = m ? m[2].trim() : e;
+  if (kind === "number") {
+    const n = parseNumber(operand);
+    if (n === null) return "error";
+    const o = op ?? "=";
+    return (v) => {
+      if (typeof v !== "number") return false;
+      if (o === "=") return Math.abs(v - n) < 0.5;
+      if (o === "<>") return Math.abs(v - n) >= 0.5;
+      return compare(v, o, n);
+    };
+  }
+  const needle = operand.toLowerCase();
+  const text = (v: string | number) => String(v).toLowerCase();
+  if (op === "=") return (v) => text(v) === needle;
+  if (op === "<>") return (v) => !text(v).includes(needle);
+  if (op) return "error";
+  return (v) => text(v).includes(needle);
+}
+
 /** "1,234.5", "5d", "12h", "40%" -> number. */
 export function parseNumber(s: string): number | null {
   const t = s.replace(/,/g, "").replace(/\s*[a-z%]+$/i, "").trim();

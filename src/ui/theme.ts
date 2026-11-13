@@ -23,7 +23,7 @@ export const GANTT = {
   relationship: "#26323f",
   gridLine: "#e6e6e6",
   majorLine: "#c8c8c8",
-  selection: "rgba(70, 140, 220, 0.18)",
+  selection: "rgba(255, 196, 40, 0.30)", // matches the grid row selection (--row-select)
   headerBg: "#f0f0f0",
   headerText: "#333333",
   headerLine: "#c0c0c0",

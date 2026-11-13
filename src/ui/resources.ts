@@ -1,5 +1,6 @@
 // Resource Usage tab: resource list (left, under the grid) and a histogram (right,
 // lined up under the Gantt's timescale), like P6's Resource Usage Profile.
+import { valueTest } from "../xer/filter";
 import { formatDate, formatNumber } from "../xer/format";
 import type { Activity, Resource, Schedule } from "../xer/model";
 import { buildUsageProfile, toManning, usageBetween, type UsageProfile } from "../xer/usage";
@@ -53,6 +54,16 @@ const INTERVALS: [HistogramSettings["interval"], string][] = [
   ["auto", "Follow Gantt zoom"],
 ];
 
+/** Resource list columns (after the colour swatch): sortable, each with a filter box. */
+const LIST_COLUMNS: { label: string; kind: "text" | "number"; value: (r: Resource) => string | number }[] = [
+  { label: "Resource ID", kind: "text", value: (r) => r.code },
+  { label: "Resource Name", kind: "text", value: (r) => r.name },
+  { label: "Type", kind: "text", value: (r) => r.type },
+  { label: "Budgeted Units", kind: "number", value: (r) => r.budget },
+  { label: "Actual Units", kind: "number", value: (r) => r.actual },
+  { label: "Remaining Units", kind: "number", value: (r) => r.remaining },
+];
+
 interface DrawnBucket {
   x0: number;
   x1: number;
@@ -72,6 +83,16 @@ export class ResourcePanel {
   filterActivities = true;
 
   private table = el("div", "rel-body");
+  private listTable = el("table", "res-table");
+  private headRow = el("tr");
+  private listBody = el("tbody");
+  private empty = el("div", "rel-empty hidden");
+  /** Resource list sort (column index into LIST_COLUMNS, or null for file order). */
+  private sortCol: number | null = null;
+  private sortDir: 1 | -1 = 1;
+  /** Filter box text per LIST_COLUMNS index. */
+  private listFilters: string[] = LIST_COLUMNS.map(() => "");
+  private listFilterTimer: ReturnType<typeof setTimeout> | undefined;
   private filterBox: HTMLInputElement;
   private canvas = el("canvas");
   private tip = el("div", "hist-tip hidden");
@@ -136,6 +157,40 @@ export class ResourcePanel {
         fit,
       ]),
     ]);
+    const filterRow = el("tr", "res-filters", [el("th")]);
+    LIST_COLUMNS.forEach((c, i) => {
+      const input = el("input");
+      input.type = "text";
+      input.dataset.i = String(i);
+      input.placeholder = c.kind === "number" ? ">0" : "Filter";
+      input.title = c.kind === "number" ? "e.g. >1000, <=0, =500" : "Contains text. =x exact, <>x excludes";
+      filterRow.append(el("th", "", [input]));
+    });
+    filterRow.addEventListener("input", (e) => {
+      const input = e.target as HTMLInputElement;
+      this.listFilters[Number(input.dataset.i)] = input.value;
+      clearTimeout(this.listFilterTimer);
+      this.listFilterTimer = setTimeout(() => this.applyListFilter(), 150);
+    });
+    filterRow.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const input = e.target as HTMLInputElement;
+      input.value = "";
+      this.listFilters[Number(input.dataset.i)] = "";
+      this.applyListFilter();
+    });
+    this.headRow.addEventListener("click", (e) => {
+      const th = (e.target as HTMLElement).closest<HTMLElement>("th[data-c]");
+      if (!th) return;
+      const c = Number(th.dataset.c);
+      // Ascending -> descending -> the file's order, like the activity grid.
+      if (this.sortCol !== c) [this.sortCol, this.sortDir] = [c, 1];
+      else if (this.sortDir === 1) this.sortDir = -1;
+      else this.sortCol = null;
+      this.renderList();
+    });
+    this.listTable.append(el("thead", "", [this.headRow, filterRow]), this.listBody);
+    this.table.append(this.listTable, this.empty);
     this.listPane = el("div", "pane res-list", [this.table, footer]);
     this.chartPane = el("div", "pane hist-pane", [this.canvas, this.message, this.tip]);
 
@@ -153,6 +208,9 @@ export class ResourcePanel {
   /** A new file was opened. */
   reset(): void {
     this.selection = null;
+    this.sortCol = null;
+    this.listFilters = LIST_COLUMNS.map(() => "");
+    for (const input of this.listTable.querySelectorAll<HTMLInputElement>(".res-filters input")) input.value = "";
     this.profile = null;
     this.profileFor = null;
     this.maxCache.clear();
@@ -160,24 +218,31 @@ export class ResourcePanel {
     this.draw();
   }
 
-  /** Back to "All Resources" (e.g. Clear Filters). */
+  /** Back to "All Resources" with the list unfiltered (e.g. Clear Filters). */
   selectAll(): void {
     this.selection = null;
+    this.listFilters = LIST_COLUMNS.map(() => "");
+    for (const input of this.listTable.querySelectorAll<HTMLInputElement>(".res-filters input")) input.value = "";
     this.renderList();
     this.draw();
   }
 
   /** Activity filter for the current selection, or null when nothing should be hidden. */
   activityFilter(): ((a: Activity) => boolean) | null {
-    if (!this.filterActivities || this.selection === null) return null;
-    const sel = this.selection;
-    return (a) => a.assignments.some((x) => sel.has(x.resource.id));
+    if (!this.filterActivities) return null;
+    const s = this.host.schedule();
+    if (!s) return null;
+    // "All Resources" with the list filtered means all the resources still listed.
+    const ids = this.selection ?? (this.listFiltered() ? new Set(this.listed(s).map((r) => r.id)) : null);
+    if (ids === null) return null;
+    return (a) => a.assignments.some((x) => ids.has(x.resource.id));
   }
 
   /** e.g. "CON.Civil" or "3 resources", for the filter bar. */
   selectionLabel(): string {
     const s = this.host.schedule();
-    if (!s || this.selection === null) return "";
+    if (!s) return "";
+    if (this.selection === null) return this.listFiltered() ? `${this.listed(s).length} listed resources` : "";
     if (this.selection.size === 1) return s.resources.find((r) => this.selection!.has(r.id))?.name ?? "";
     return `${this.selection.size} resources`;
   }
@@ -211,23 +276,72 @@ export class ResourcePanel {
     return PALETTE[s.resources.indexOf(r) % PALETTE.length];
   }
 
+  /** True when any list filter box has text. */
+  private listFiltered(): boolean {
+    return this.listFilters.some((f) => f.trim() !== "");
+  }
+
+  /** Resources passing the list's filter boxes, in the list's sort order. */
+  private listed(s: Schedule): Resource[] {
+    const tests = this.listFilters.map((f, i) => (f.trim() ? valueTest(LIST_COLUMNS[i].kind, f) : null));
+    let list = s.resources.filter((r) => tests.every((t, i) => !t || t === "error" || t(LIST_COLUMNS[i].value(r))));
+    if (this.sortCol !== null) {
+      const col = LIST_COLUMNS[this.sortCol];
+      const dir = this.sortDir;
+      list = [...list].sort((x, y) => {
+        const vx = col.value(x);
+        const vy = col.value(y);
+        const c = typeof vx === "number" && typeof vy === "number" ? vx - vy : String(vx).localeCompare(String(vy), undefined, { numeric: true });
+        return c * dir;
+      });
+    }
+    return list;
+  }
+
+  /** The list's filter boxes changed: re-list, and drop selected resources no longer listed. */
+  private applyListFilter(): void {
+    clearTimeout(this.listFilterTimer);
+    const s = this.host.schedule();
+    if (s && this.selection) {
+      const listed = new Set(this.listed(s).map((r) => r.id));
+      const kept = new Set([...this.selection].filter((id) => listed.has(id)));
+      this.selection = kept.size ? kept : null;
+    }
+    this.renderList();
+    this.draw();
+    this.host.onSelectionChange();
+  }
+
   private renderList(): void {
     const s = this.host.schedule();
-    if (!s || !s.resources.length) {
-      this.table.innerHTML = `<div class="rel-empty">${s ? "No resources are assigned in this file." : ""}</div>`;
+    const none = !s || !s.resources.length;
+    this.listTable.classList.toggle("hidden", none);
+    this.empty.classList.toggle("hidden", !none);
+    this.empty.textContent = s ? "No resources are assigned in this file." : "";
+    this.headRow.innerHTML =
+      `<th></th>` +
+      LIST_COLUMNS.map(
+        (c, i) =>
+          `<th data-c="${i}" title="Click to sort">${c.label}${i === this.sortCol ? `<span class="sort">${this.sortDir === 1 ? "▲" : "▼"}</span>` : ""}</th>`,
+      ).join("");
+    for (const input of this.listTable.querySelectorAll<HTMLInputElement>(".res-filters input")) {
+      const f = this.listFilters[Number(input.dataset.i)];
+      input.classList.toggle("bad", !!f.trim() && valueTest(LIST_COLUMNS[Number(input.dataset.i)].kind, f) === "error");
+    }
+    if (none) {
+      this.listBody.innerHTML = "";
       return;
     }
+    const list = this.listed(s);
     const units = (r: { type?: string }, v: number) => formatNumber(v, 0) + (r.type === "Labor" ? "h" : "");
-    const allLabor = s.resources.every((r) => r.type === "Labor");
-    const sum = (k: "budget" | "actual" | "remaining") => s.resources.reduce((n, r) => n + r[k], 0);
-    const head = ["", "Resource ID", "Resource Name", "Type", "Budgeted Units", "Actual Units", "Remaining Units"]
-      .map((h) => `<th>${h}</th>`)
-      .join("");
+    const allLabor = list.every((r) => r.type === "Labor");
+    const sum = (k: "budget" | "actual" | "remaining") => list.reduce((n, r) => n + r[k], 0);
+    const count = list.length === s.resources.length ? `${list.length}` : `${list.length} of ${s.resources.length}`;
     const allRow =
-      `<tr data-r="${ALL}" class="res-all${this.selection === null ? " sel" : ""}"><td></td><td colspan="3">All Resources (${s.resources.length})</td>` +
+      `<tr data-r="${ALL}" class="res-all${this.selection === null ? " sel" : ""}"><td></td><td colspan="3">All Resources (${count})</td>` +
       ["budget", "actual", "remaining"].map((k) => `<td class="r">${units({ type: allLabor ? "Labor" : "" }, sum(k as "budget"))}</td>`).join("") +
       `</tr>`;
-    const rows = s.resources
+    const rows = list
       .map((r) => {
         const sel = this.selection?.has(r.id) ? " sel" : "";
         return (
@@ -237,11 +351,11 @@ export class ResourcePanel {
         );
       })
       .join("");
-    this.table.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${allRow}${rows}</tbody></table>`;
+    this.listBody.innerHTML = allRow + (rows || `<tr><td></td><td colspan="6" class="res-none">No resources match the filter.</td></tr>`);
   }
 
   private shown(s: Schedule): Resource[] {
-    return this.selection === null ? s.resources : s.resources.filter((r) => this.selection!.has(r.id));
+    return this.selection === null ? this.listed(s) : s.resources.filter((r) => this.selection!.has(r.id));
   }
 
   /** Redraws the histogram for the Gantt's current zoom and scroll. */

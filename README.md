@@ -40,7 +40,7 @@ in the same browser.
 ## Using it
 
 - **Toolbar**: the everyday commands as buttons under the menus (Open, Save, Export
-  to Excel, Expand/Collapse All, Find, Filters, Gantt and zoom, Add Comment, Help).
+  to Excel, Expand/Collapse All, Find, the Filter menu, Gantt and zoom, Add Comment, Help).
   Hover one for its shortcut. **View > Toolbar** hides it.
 - **WBS**: double-click a band or click its arrow to expand/collapse.
   **View > Expand All / Collapse All / Expand To > Level n**.
@@ -55,16 +55,18 @@ in the same browser.
   **UDF** with values. Double-click, the arrow buttons, Ctrl/Shift-click and the
   filter box all work as in P6. Code and UDF columns are saved by name, so a layout
   carries over to other files that use them.
-- **Filters** (**View > Filters**, Ctrl+Shift+F; hidden until turned on): tick statuses, Critical or
-  Milestones, or pick a date window ("Look ahead..." fills it from the data date).
-  Type in the boxes under the column headers: text matches anywhere (`=x` exact,
-  `<>x` excludes); numbers and dates take `>`, `<`, `>=`, `<=`, `=`, e.g. `>0` in
-  Remaining Labor Units or `<01-Jul-26` in Finish. WBS totals show only what the
-  filter matches. **Clear Filters** resets everything.
+- **Filters**: the **Filter** menu (or the toolbar's funnel button) ticks statuses,
+  Critical, Milestones or With Comments, and sets a date window (**Active Between...**,
+  or **Look Ahead** from the data date). **Filter > Filter Row** (Ctrl+Shift+F) adds
+  boxes under the column headers: text matches anywhere (`=x` exact, `<>x`
+  excludes); numbers and dates take `>`, `<`, `>=`, `<=`, `=`, e.g. `>0` in Remaining
+  Labor Units or `<01-Jul-26` in Finish. While filtered, a yellow note in the status
+  bar gives the count; WBS totals show only what the filter matches. The selected
+  activity stays selected and in view. **Clear Filters** resets everything.
 - **Column filters**: the funnel on each column header opens an Excel-style filter:
   tick the values to keep (with counts, and (Blanks)), search the list, type a
   condition, or sort the column. A filtered column's funnel turns blue. Column filters
-  stay on when the filter section is hidden; the status bar then says so.
+  stay on when the filter row is hidden.
 - **Export to Excel** (**File > Export to Excel**, Ctrl+E for all rows): the columns
   you're showing, with the current sort and filters, as an `.xlsx`. Dates and numbers
   are real Excel values, WBS bands keep their colours and become row groups, and an
@@ -76,7 +78,9 @@ in the same browser.
   resource to see it alone (actual blue, remaining green) and to show only the
   activities that use it; Ctrl-click to add more; **All Resources** stacks every
   resource in its own colour. Hover a bar for the numbers. Untick "Show only
-  activities..." to keep all activities in view.
+  activities..." to keep all activities in view. Click the list's headers to sort it,
+  and type in the boxes under them to filter it (e.g. `>20000` in Budgeted Units);
+  **All Resources** then means the resources still listed.
   **Bars by** sets the bar period (Week by default) independently of the Gantt zoom:
   press **Fit project** to squeeze the whole project into view and keep weekly bars.
   Tick **Manning** and enter the hours one person works per week (e.g. 70 for
@@ -92,9 +96,9 @@ in the same browser.
   **View > Relationship Lines > None / Driving Only / All**. The selected
   activity's lines are drawn thicker.
 - **Durations**: **View > Duration Unit** (hours, days, weeks, months), converted
-  with each activity's calendar. WBS bands show the working time on the project
-  calendar between their summarised start and finish (remaining: from the data date),
-  in the same unit.
+  with each activity's calendar. WBS bands show the working time between their
+  summarised start and finish (remaining: from the data date) on the calendar most of
+  their activities use, in the same unit.
 
 Column choices, widths and units are remembered per browser.
 
@@ -111,6 +115,8 @@ npm run dev        # http://localhost:5173/?file=/tests/fixtures/sample.xer
 npm test
 npm run build      # -> dist/xer-viewer-v<version>.html
 ```
+
+Changes in each version are listed in [CHANGELOG.md](CHANGELOG.md).
 
 Put real `.xer` files in the project root to have `npm test` check them too
 (they're gitignored). Project notes for Claude Code are in `CLAUDE.md`.

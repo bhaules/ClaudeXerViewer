@@ -10,6 +10,9 @@
   --menu-hover-border: #99c9ef;
   --select: #9fc9ee;
   --select-text: #000;
+  /* Grid row selection: amber, so it never matches a (blue) WBS band colour. */
+  --row-select: #ffd45e;
+  --row-select-edge: #c08a00;
   --row-h: 22px;
   --head-h: 38px;
   --filter-h: 24px;
@@ -60,19 +63,8 @@ body {
 .menu .mi .sub { text-align: right; font-size: 9px; }
 .menu .sep { height: 1px; background: #d7d7d7; margin: 3px 2px 3px 26px; }
 
-/* ---------- Filter bar ---------- */
-.filterbar {
-  flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 30px; padding: 3px 8px;
-  background: var(--chrome); border-bottom: 1px solid var(--border);
-}
-.filterbar.active { background: #fff8d6; }
-.fb-title { font-weight: 600; }
-.fb-group { display: inline-flex; align-items: center; gap: 8px; }
-.fb-check { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+/* Separator used in panel bars (e.g. the Comments tab). */
 .fb-sep { width: 1px; height: 18px; background: #c8c8c8; }
-.filterbar input[type=date], .filterbar select { height: 22px; font: inherit; border: 1px solid #a8a8a8; background: #fff; }
-.filterbar .btn { height: 22px; }
-.fb-count { margin-left: auto; font-weight: 600; color: #7a5a00; white-space: nowrap; }
 
 /* ---------- Layout ---------- */
 .workspace { flex: 1; display: flex; flex-direction: column; min-height: 0; background: #fff; }
@@ -100,6 +92,8 @@ body {
   background: var(--chrome); border-top: 1px solid var(--border); color: #333; white-space: nowrap; overflow: hidden;
 }
 .statusbar .left { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+/* While anything is filtered: a yellow note with the count. */
+.statusbar .filter-note { flex: none; padding: 1px 8px; background: #ffe58a; border: 1px solid #d4a800; border-radius: 2px; font-weight: 600; color: #5a4100; }
 
 /* ---------- Grid ---------- */
 .ghead {
@@ -141,7 +135,7 @@ body {
 .row.wbs { font-weight: 600; border-bottom-color: rgba(255,255,255,.35); }
 .row.wbs .cell { border-right-color: transparent; }
 .row.act { background: #fff; }
-.row.sel, .row.wbs.sel { background: var(--select) !important; color: var(--select-text) !important; }
+.row.sel, .row.wbs.sel { background: var(--row-select) !important; color: #000 !important; box-shadow: inset 0 1px 0 var(--row-select-edge), inset 0 -1px 0 var(--row-select-edge); }
 .gbody:focus .row.sel { outline: 1px dotted #1d4f91; outline-offset: -1px; }
 .row.hit .cell .txt { background: #fff3a0; color: #000; }
 
@@ -388,3 +382,12 @@ body {
 .tb.pressed { background: #d6e6f5; border-color: #8db6e0; }
 .tb:disabled { opacity: 0.35; }
 .tb-sep { width: 1px; height: 18px; margin: 0 5px; background: #c8c8c8; }
+
+/* Resource list: sortable headers and a filter row under them. */
+.res-table th[data-c] { cursor: default; }
+.res-table .res-filters th { top: 24px; height: 24px; padding: 2px; background: #f4f4f4; }
+.res-table .res-filters th:hover { background: #f4f4f4; }
+.res-table .res-filters input { width: 100%; height: 19px; border: 1px solid #c4c4c4; padding: 0 4px; font: inherit; font-size: 11px; font-weight: 400; background: #fff; user-select: text; }
+.res-table .res-filters input:focus { outline: none; border-color: #3c8be0; }
+.res-table .res-filters input.bad { border-color: #d33; background: #fff0f0; }
+.res-table .res-none { color: var(--muted); }

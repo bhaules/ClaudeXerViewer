@@ -13,8 +13,9 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
   `http://localhost:5173/?file=/tests/fixtures/sample.xer` to auto-load the fixture.
 - `npm run build`: typecheck + build `dist/xer-viewer-v<version>.html` (everything inlined).
   The version is `package.json` `version`, also shown as `__APP_VERSION__` (Help > About,
-  welcome screen, Excel Export Info). Bump it for each release; the release tag is
-  `v<version>` and the asset keeps the versioned file name.
+  welcome screen, Excel Export Info). Bump it for each release and add a section to
+  `CHANGELOG.md` (Changed / Added / Fixed); the release tag is `v<version>`, its notes
+  follow that section, and the asset keeps the versioned file name.
 - `npm test`: Vitest (parser/model). `tests/real-files.test.ts` also parses any
   `*.xer` in the project root and is skipped when there are none.
 - `npm run typecheck`
@@ -142,10 +143,15 @@ under the mouse on mousedown, or double-click stops working.
 - WBS band rows: bold, colour by level (P6/Python palette in `src/ui/theme.ts`),
   white text on the dark levels, rolled-up start/finish and min total float.
   Band Original / Remaining Duration come from the band's summarised dates, never from
-  activity durations (`wbsWorkHours`): working hours on the project calendar from start
-  to finish, and from max(start, data date) to finish (0 when all complete), shown in
-  the Duration Unit with the project calendar's hours per day. Cached per calendar and
-  date pair.
+  activity durations (`wbsWorkHours`): working hours from start to finish, and from
+  max(start, data date) to finish (0 when all complete), on `Wbs.calendar` = the
+  calendar most of the band's (filtered) activities use, ties to the project calendar
+  (set in `rollUp`). Projects often have a no-holiday default calendar while the
+  activities have a Christmas break, so the project calendar overstates bands. Shown in
+  the Duration Unit with that calendar's hours per day. Cached per calendar and dates.
+- Selection: grid row and Gantt use amber (`--row-select`, `GANTT.selection`), never a
+  blue (WBS bands are blue). Filtering never drops the selection: `rebuildKeepingSelection`
+  keeps it at the same screen height, or centres it when a filter that hid it goes away.
 - Dates `dd-Mmm-yy`; suffix ` A` for actuals, `*` when a constraint applies.
 - Under each WBS band: its own activities first, then its child WBS bands.
 - Sorting reorders activities WITHIN their WBS; WBS stay in seq_num order.
@@ -170,26 +176,31 @@ under the mouse on mousedown, or double-click stops working.
   are saved in prefs (`histogram`). One selected
   resource: actual blue + remaining green. All / several (Ctrl-click): stacked, one
   palette colour per resource, actual in a darker shade. The y scale is fixed for the
-  whole project at the current zoom so bars don't jump while scrolling. Selecting
+  whole project at the current zoom so bars don't jump while scrolling. The resource
+  list sorts by header click and has a filter row (`valueTest` in filter.ts); with "All
+  Resources" selected and the list filtered, "all" means the listed resources (histogram
+  and activity filter). Selecting
   resources filters activities (combined with the other filters in `applyFilter`)
   only while the Resource Usage tab is on screen and its checkbox is ticked; the
   filter bar names it. Clear Filters also resets to All Resources.
-- Menus: View is grouped (Columns / units / Hide Empty WBS; expand; Filters / Clear
-  Filters / Clear Sort; Toolbar / Gantt Chart / Show on Bottom (P6's name: Relationships,
+- Menus: View is grouped (Columns / units / Hide Empty WBS; expand; Clear Sort;
+  Toolbar / Gantt Chart / Show on Bottom (P6's name: Relationships,
   Resource Usage, Comments, None); Relationship Lines / Zoom / Go to Data Date).
   Right-clicking a column header opens a menu (sort, filter, clear filter, hide,
-  Columns...).
-- Filters (View > Filters, Ctrl+Shift+F, off by default): a filter bar (status, critical, milestones,
-  "active between" dates with look-ahead presets from the data date) and a filter row
-  under the grid headers. Logic is in `src/xer/filter.ts`; column expressions follow
+  Columns...). The Filter menu (`src/ui/filter-menu.ts`; the toolbar funnel opens it via
+  `MenuBar.openAt`) has the quick filters (status, critical, milestones, with comments,
+  Active Between... dialog, Look Ahead from the data date), Filter Row and Clear Filters.
+- Filters: the quick filters above, and a filter row under the grid headers (Filter >
+  Filter Row, Ctrl+Shift+F, off by default). While anything is filtered (`view.filter`,
+  which includes the resource filter) the status bar shows a yellow "Filter on: showing
+  n of m" note and Clear Filters is enabled; opening a file resets and re-applies. Logic is in `src/xer/filter.ts`; column expressions follow
   `Column.kind` (text: contains / =x / <>x; number and date: > < >= <= = <>; numbers
   are in the displayed duration unit). While filtering, WBS with no matches are hidden
   and WBS totals are re-added from matching activities only (`applyRollups`), like P6.
   Column funnels (`FilterState.values`: column key -> ticked display texts) give an
   Excel-style value list; its values come from activities passing the OTHER filters.
-  Hiding the filter section clears the filter bar's filters but keeps column filters
-  (funnels stay highlighted and the status bar says "Filter on"), so nothing is
-  filtered invisibly. Changing the Duration Unit drops ticked values on duration
+  Hiding the filter row keeps typed filters (funnels stay highlighted, the status note
+  stays), so nothing is filtered invisibly. Changing the Duration Unit drops ticked values on duration
   columns (their text changed). The filter row's inputs are only rebuilt when
   columns/widths change, never while typing (that would steal focus).
 - Export to Excel (Ctrl+E = all rows, or rows as shown): visible columns in order,

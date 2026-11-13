@@ -49,14 +49,15 @@ export interface Column {
 
 const STATUS_NAMES = { NotStarted: "Not Started", InProgress: "In Progress", Completed: "Completed" } as const;
 
-const wbsCal = (w: Wbs) => w.project?.calendar ?? FALLBACK_CAL;
+/** The band's main calendar (the one most of its activities use), else the project's. */
+const wbsCal = (w: Wbs) => w.calendar ?? w.project?.calendar ?? FALLBACK_CAL;
 
 const workCache = new Map<string, number>();
 
 /**
- * WBS band Original / Remaining Duration: the working hours on the project calendar
- * between the band's summarised start and finish, ignoring the activities' own
- * durations. Remaining runs from the later of the start and the data date; a band whose
+ * WBS band Original / Remaining Duration: the working hours between the band's summarised
+ * start and finish on the calendar most of its activities use, ignoring the activities'
+ * own durations. Remaining runs from the later of the start and the data date; a band whose
  * activities are all complete has 0 remaining. Cached, since bands redraw on every scroll.
  */
 export function wbsWorkHours(w: Wbs, remaining: boolean): number | null {

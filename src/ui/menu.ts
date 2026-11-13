@@ -66,11 +66,13 @@ export class MenuBar {
   readonly root: HTMLElement;
   readonly title = el("div", "title");
   private open: { top: HTMLElement; menus: HTMLElement[] } | null = null;
+  private tops = new Map<string, [HTMLElement, TopMenu]>();
 
   constructor(menus: TopMenu[]) {
     this.root = el("div", "menubar");
     for (const m of menus) {
       const top = el("div", "mtop", [m.label]);
+      this.tops.set(m.label, [top, m]);
       top.addEventListener("mousedown", (e) => {
         e.preventDefault();
         if (this.open?.top === top) this.close();
@@ -95,6 +97,16 @@ export class MenuBar {
     const r = top.getBoundingClientRect();
     this.open = { top, menus: [] };
     this.dropdown(m.items(), r.left, r.bottom, 0);
+  }
+
+  /** Opens a top-level menu as a dropdown at (x, y), e.g. under a toolbar button. */
+  openAt(label: string, x: number, y: number): void {
+    const entry = this.tops.get(label);
+    if (!entry) return;
+    this.close();
+    entry[0].classList.add("open");
+    this.open = { top: entry[0], menus: [] };
+    this.dropdown(entry[1].items(), x, y, 0);
   }
 
   close(): void {

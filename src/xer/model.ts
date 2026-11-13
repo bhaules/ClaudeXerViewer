@@ -44,6 +44,11 @@ export interface Wbs {
   critical: boolean;
   labor: LaborUnits;
   nonlabor: LaborUnits;
+  /**
+   * The calendar most of the band's activities use (ties go to the project calendar),
+   * for its Original / Remaining Duration and float. Null when it has no activities.
+   */
+  calendar: Calendar | null;
 }
 
 /** An activity code type (ACTVTYPE), e.g. "Discipline". Only types used in the file are kept. */
@@ -309,6 +314,7 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
       critical: false,
       labor: { budget: 0, actual: 0, remaining: 0 },
       nonlabor: { budget: 0, actual: 0, remaining: 0 },
+      calendar: null,
     });
   }
 
@@ -502,6 +508,7 @@ const EMPTY_WBS: Wbs = {
   critical: false,
   labor: { budget: 0, actual: 0, remaining: 0 },
   nonlabor: { budget: 0, actual: 0, remaining: 0 },
+  calendar: null,
 };
 
 const UDF_DATE_TYPES = new Set(["FT_START_DATE", "FT_END_DATE", "FT_DATE"]);
@@ -662,8 +669,11 @@ export function applyRollups(roots: Wbs[], include?: (a: Activity) => boolean): 
   for (const root of roots) rollUp(root, include);
 }
 
-function rollUp(node: Wbs, include?: (a: Activity) => boolean): void {
+/** Returns how many of the counted activities in the subtree use each calendar. */
+function rollUp(node: Wbs, include?: (a: Activity) => boolean): Map<Calendar, number> {
   const own = include ? node.activities.filter(include) : node.activities;
+  const calendars = new Map<Calendar, number>();
+  for (const a of own) calendars.set(a.calendar, (calendars.get(a.calendar) ?? 0) + 1);
   let count = own.length;
   let start: number | null = null;
   let finish: number | null = null;
@@ -697,7 +707,7 @@ function rollUp(node: Wbs, include?: (a: Activity) => boolean): void {
     add(nonlabor, a.nonlabor);
   }
   for (const c of node.children) {
-    rollUp(c, include);
+    for (const [cal, n] of rollUp(c, include)) calendars.set(cal, (calendars.get(cal) ?? 0) + n);
     if (c.activityCount === 0) continue;
     count += c.activityCount;
     take(c.start, c.startActual, c.finish, c.finishActual, c.totalFloatHrs, c.critical);
@@ -714,4 +724,15 @@ function rollUp(node: Wbs, include?: (a: Activity) => boolean): void {
   node.finishActual = count > 0 && allFinished;
   node.totalFloatHrs = tf;
   node.critical = critical;
+
+  let main: Calendar | null = null;
+  let most = 0;
+  for (const [cal, n] of calendars) {
+    if (n > most || (n === most && cal === node.project?.calendar)) {
+      main = cal;
+      most = n;
+    }
+  }
+  node.calendar = main;
+  return calendars;
 }

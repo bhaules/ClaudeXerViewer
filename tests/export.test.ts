@@ -2,8 +2,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { loadSchedule } from "../src/xer";
+import { applyRollups } from "../src/xer/model";
 import { scheduleColumns, wbsWorkHours } from "../src/xer/columns";
-import { compileFilter, emptyFilter, filterActive } from "../src/xer/filter";
+import { compileFilter, emptyFilter, filterActive, valueTest } from "../src/xer/filter";
 import { buildRows, expandedAll, type ViewState } from "../src/xer/rows";
 import { buildActivitiesXlsx, colName, crc32 } from "../src/xer/xlsx";
 
@@ -46,14 +47,27 @@ describe("WBS band durations", () => {
   const con = root.children[1]; // 24-Feb-25 07:00 to 12-Mar-25 17:00
   const working = { unit: "d" as const };
 
-  it("counts working hours on the project calendar between the summarised dates", () => {
-    // 8h Mon-Fri: 24-28 Feb, 3-7 Mar and 10-12 Mar are 13 working days.
-    expect(wbsWorkHours(con, false)).toBe(13 * 8);
-    expect(cols.get("origDur")!.wbsText(con, working)).toBe("13d");
+  it("counts working hours between the summarised dates on the band's main calendar", () => {
+    // Most of the project's activities use the 8h Mon-Fri project calendar.
+    expect(root.calendar?.name).toBe("8h 5d");
     // From the data date: 3 Feb to 12 Mar is 28 weekdays, less the 10 Feb holiday.
     expect(wbsWorkHours(root, true)).toBe(27 * 8);
     expect(cols.get("remDur")!.wbsText(root, working)).toBe("27d");
     expect(cols.get("remDur")!.wbsText(root, { ...working, unit: "h" })).toBe("216h");
+  });
+
+  it("uses the activities' calendar when it differs from the project's", () => {
+    // Both Construction activities are on the 10h Mon-Sat calendar, which has no holidays:
+    // 24 Feb-1 Mar, 3-8 Mar and 10-12 Mar are 15 working days of 10h.
+    expect(con.calendar?.name).toBe("10h 6d");
+    expect(wbsWorkHours(con, false)).toBe(15 * 10);
+    expect(cols.get("origDur")!.wbsText(con, working)).toBe("15d");
+    // Filtering re-picks the calendar from the matching activities only.
+    applyRollups(schedule.roots, (a) => a.code === "E1000");
+    expect(root.calendar?.name).toBe("8h 5d");
+    expect(con.calendar).toBeNull();
+    applyRollups(schedule.roots);
+    expect(con.calendar?.name).toBe("10h 6d");
   });
 
   it("has nothing remaining once complete", () => {
@@ -141,5 +155,27 @@ describe("Excel export", () => {
   it("escapes text in the info sheet", async () => {
     const info = (await unzip(await build([["Column filters", `Name: <b> & "x"`]]))).get("xl/worksheets/sheet2.xml")!;
     expect(info).toContain("Name: &lt;b&gt; &amp; &quot;x&quot;");
+  });
+});
+
+describe("list filters (resource list)", () => {
+  const pass = (kind: "text" | "number", expr: string, values: (string | number)[]) => {
+    const t = valueTest(kind, expr);
+    if (t === "error") return "error";
+    return values.filter((v) => t(v));
+  };
+
+  it("matches text by contains, = and <>", () => {
+    expect(pass("text", "conc", ["Concrete", "Commissioning", "Precast concrete"])).toEqual(["Concrete", "Precast concrete"]);
+    expect(pass("text", "=labor", ["Labor", "Nonlabor"])).toEqual(["Labor"]);
+    expect(pass("text", "<>labor", ["Labor", "Nonlabor", "Material"])).toEqual(["Material"]);
+    expect(pass("text", ">x", ["a"])).toBe("error");
+  });
+
+  it("compares numbers, with = meaning the whole number shown", () => {
+    expect(pass("number", ">50000", [89467, 16199, 56610])).toEqual([89467, 56610]);
+    expect(pass("number", "<=0", [0, 12, -1])).toEqual([0, -1]);
+    expect(pass("number", "16199", [16199.4, 16200])).toEqual([16199.4]);
+    expect(pass("number", "lots", [1])).toBe("error");
   });
 });

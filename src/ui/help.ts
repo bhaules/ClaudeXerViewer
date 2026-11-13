@@ -21,7 +21,7 @@ const SECTIONS: Section[] = [
       <ul>
         <li><b>Open a schedule:</b> <b>File &gt; Open</b> (Ctrl+O), or drag a <b>.xer</b> file onto the window.</li>
         <li><b>Saved viewer files</b> (<b>.html</b>) open straight to their schedule when you double-click them. You can also drop one onto a blank viewer.</li>
-        <li>The <b>toolbar</b> under the menus has the everyday commands: Open, Save, Export to Excel, Expand / Collapse All, Find, Filters, Clear Filters, Gantt Chart, Zoom In / Out / to Fit, Go to Data Date, Add Comment and this guide. Hover a button for its name and shortcut. <b>View &gt; Toolbar</b> hides it.</li>
+        <li>The <b>toolbar</b> under the menus has the everyday commands: Open, Save, Export to Excel, Expand / Collapse All, Find, the Filter menu, Clear Filters, Gantt Chart, Zoom In / Out / to Fit, Go to Data Date, Add Comment and this guide. Hover a button for its name and shortcut. <b>View &gt; Toolbar</b> hides it.</li>
         <li>The title bar shows the project and its <b>data date</b>. The status bar shows what's selected and how many activities and relationships the file has.</li>
         <li>Your choices (columns, widths, units, panels, histogram settings) are remembered in this browser.</li>
       </ul>`,
@@ -34,7 +34,8 @@ const SECTIONS: Section[] = [
         <li>Activities are grouped by <b>WBS</b>. Click a band's arrow, double-click it, or press → / ← to expand or collapse it.</li>
         <li><b>View &gt; Expand All</b>, <b>Collapse All</b> and <b>Expand To &gt; Level n</b> open the whole tree to a level.</li>
         <li>Move with ↑ ↓, Page Up/Down, Home and End. ← on an activity jumps up to its WBS band.</li>
-        <li>WBS bands show the summarised <b>Start</b> and <b>Finish</b>, the lowest <b>Total Float</b> and labour totals. Their <b>Original Duration</b> is the working time on the project calendar between the band's summarised Start and Finish; <b>Remaining Duration</b> is the same from the data date (0 once everything under it is complete). They are not added up from the activities, so overlapping activities aren't counted twice. Both show in the Duration Unit, like the activities.</li>
+        <li>WBS bands show the summarised <b>Start</b> and <b>Finish</b>, the lowest <b>Total Float</b> and labour totals. Their <b>Original Duration</b> is the working time between the band's summarised Start and Finish, on the calendar most of its activities use (so a Christmas shutdown in the activities' calendar is left out even if the project calendar has none); <b>Remaining Duration</b> is the same from the data date (0 once everything under it is complete). They are not added up from the activities, so overlapping activities aren't counted twice. Both show in the Duration Unit, like the activities.</li>
+        <li>The selected row is highlighted in <b>amber</b> in the grid and the Gantt, so it stands out from the blue WBS bands.</li>
         <li>Dates follow P6: <b>A</b> after a date means actual; <b>*</b> means a constraint applies.</li>
         <li><b>View &gt; Hide Empty WBS</b> hides bands with no activities under them.</li>
       </ul>`,
@@ -70,12 +71,12 @@ const SECTIONS: Section[] = [
     html: `
       <ul>
         <li><b>Find</b> (Ctrl+F) searches Activity IDs and names. Enter or F3 for the next match, Shift+Enter or Shift+F3 for the previous. Matches are highlighted.</li>
-        <li><b>View &gt; Filters</b> (Ctrl+Shift+F) shows the filter bar and a filter row under the column headers. Both are hidden until you turn them on; the column funnels work either way.</li>
-        <li><b>Filter bar:</b> tick Not Started / In Progress / Completed, Critical, Milestones or With comments. <b>Active between</b> keeps activities that are underway at any point in a date range; <b>Look ahead</b> fills it from the data date (2 weeks to 3 months).</li>
-        <li><b>Filter row:</b> type under any column. Text matches anywhere (<code>=x</code> exact, <code>&lt;&gt;x</code> excludes). Numbers and dates take <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code> <code>=</code>, e.g. <code>&gt;0</code> in Remaining Labor Units or <code>&lt;01-Jul-26</code> in Finish. A plain <code>Jul-26</code> finds any date in July 2026. A red box means the filter wasn't understood. Esc clears a box.</li>
+        <li>The <b>Filter</b> menu (also the funnel button on the toolbar): tick <b>Not Started</b> / <b>In Progress</b> / <b>Completed</b>, <b>Critical</b>, <b>Milestones</b> or <b>With Comments</b>. <b>Active Between...</b> keeps activities that are underway at any point in a date range; <b>Look Ahead</b> sets that range from the data date (2 weeks to 3 months). Ticks show what's on.</li>
+        <li><b>Filter &gt; Filter Row</b> (Ctrl+Shift+F) shows a row of boxes under the column headers. Type under any column. Text matches anywhere (<code>=x</code> exact, <code>&lt;&gt;x</code> excludes). Numbers and dates take <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code> <code>=</code>, e.g. <code>&gt;0</code> in Remaining Labor Units or <code>&lt;01-Jul-26</code> in Finish. A plain <code>Jul-26</code> finds any date in July 2026. A red box means the filter wasn't understood. Esc clears a box.</li>
         <li><b>Column funnel:</b> click the funnel on a column header for an Excel-style filter. Tick the values to keep (with how many activities have each; <i>(Blanks)</i> is the empty ones), search the list, type a condition (same as the filter row), or sort the column. The list only shows values left in by the other filters. A filtered column's funnel turns blue.</li>
-        <li>While filtering, WBS bands only show matching activities and their totals are added up from those, like P6. The bar turns yellow and shows how many activities are showing.</li>
-        <li><b>Clear Filters</b> resets everything. Hiding the filter section clears the filter bar's own ticks and dates; column filters stay on (their funnels stay blue) and the status bar says how many activities are showing.</li>
+        <li>While anything is filtered, a yellow note in the status bar says how many activities are showing, and the toolbar's funnel button is pressed. WBS bands only show matching activities and their totals are added up from those, like P6.</li>
+        <li><b>Clear Filters</b> (Filter menu or toolbar) resets everything, including a resource selected on the Resource Usage tab. Hiding the filter row keeps what you typed; those columns' funnels stay blue.</li>
+        <li>The <b>selected activity stays selected</b> while you filter. If it is still showing it stays where it was on screen, and when a filter that hid it is cleared, the grid scrolls back to it.</li>
         <li>Changing the Duration Unit drops values ticked in duration columns, since they were in the old unit.</li>
       </ul>`,
   },
@@ -114,6 +115,7 @@ const SECTIONS: Section[] = [
     html: `
       <ul>
         <li>The <b>Resource Usage</b> tab lists the resources with budgeted, actual and remaining units, and draws a histogram lined up under the Gantt (it follows the Gantt's zoom and scrolling).</li>
+        <li>Click a column header in the resource list to sort it (again for descending, a third time for the file's order). Type in the boxes under the headers to filter it: text matches anywhere (<code>=x</code> exact, <code>&lt;&gt;x</code> excludes) and units take <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code> <code>=</code>, e.g. <code>&gt;20000</code>. <b>All Resources</b> then means the resources still listed.</li>
         <li>Click a resource to see it alone: actual in blue, remaining in green. Ctrl-click to add more; <b>All Resources</b> stacks every resource in its own colour. Hover a bar for the numbers.</li>
         <li>Selecting resources also shows only the activities that use them. Untick <b>Show only activities that use the selected resources</b> to keep everything in view.</li>
         <li><b>Bars by</b> sets each bar's period (Week by default) separately from the Gantt zoom. <b>Fit project</b> squeezes the whole project into view and keeps weekly bars.</li>
@@ -135,7 +137,7 @@ const SECTIONS: Section[] = [
       <ol>
         <li>Open your copy of the schedule, then drop all the returned files onto it at once (or <b>Review &gt; Import Reviewers' Files</b>). Importing the same file twice doesn't duplicate anything.</li>
         <li>The <b>Comments</b> tab lists every comment. Click one to jump to its activity; tick <b>Done</b> once you've made the change in P6; filter by Open / Done or by reviewer. The <b>Status</b> column is filled in automatically: <b>Moved since</b> (the activity's dates have changed since the comment was written), <b>Not in this schedule</b> (the activity was deleted or renumbered), or who marked it done and when.</li>
-        <li><b>With comments</b> on the filter bar shows only the activities that have them.</li>
+        <li><b>Filter &gt; With Comments</b> shows only the activities that have them.</li>
       </ol>
       <p>Comments are never written into the .xer or imported into P6. If the window is closed without saving, the browser warns you, and unsaved comments come back the next time the schedule is opened in the same browser.</p>`,
   },
@@ -192,7 +194,7 @@ export function showShortcuts(): void {
     ["Ctrl+E", "Export all rows to Excel"],
     ["Ctrl+F", "Find activity by ID or name"],
     ["F3 / Shift+F3", "Find next / previous"],
-    ["Ctrl+Shift+F", "Show / hide filters"],
+    ["Ctrl+Shift+F", "Show / hide the filter row under the headers"],
     ["Ctrl+M or right-click a row", "Add a review comment"],
     ["↑ ↓ PgUp PgDn Home End", "Move selection"],
     ["→ / ←", "Expand / collapse WBS (← on an activity jumps to its WBS)"],

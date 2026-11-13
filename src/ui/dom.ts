@@ -53,3 +53,39 @@ export function modal(title: string, bodyHtml: string, className = ""): HTMLElem
   ok.focus();
   return box;
 }
+
+/** Small form dialog. Resolves with the result of `read()` on OK, or null on Cancel. */
+export function formDialog<T>(title: string, body: HTMLElement, okLabel: string, read: () => T | null, focus?: HTMLElement): Promise<T | null> {
+  return new Promise((resolve) => {
+    const x = el("button", "xbtn", ["×"]);
+    const ok = el("button", "btn primary", [okLabel]);
+    const cancel = el("button", "btn", ["Cancel"]);
+    const box = el("div", "modal", [
+      el("div", "fhead", [el("span", "", [title]), x]),
+      el("div", "mbody", [body]),
+      el("div", "mfoot dlg-foot", [ok, cancel]),
+    ]);
+    const back = el("div", "modal-back", [box]);
+    const finish = (v: T | null) => {
+      back.remove();
+      resolve(v);
+    };
+    const submit = () => {
+      const v = read();
+      if (v !== null) finish(v);
+    };
+    ok.addEventListener("click", submit);
+    cancel.addEventListener("click", () => finish(null));
+    x.addEventListener("click", () => finish(null));
+    back.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") finish(null);
+      // Enter submits, except in the comment box (Ctrl+Enter there).
+      else if (e.key === "Enter" && ((e.target as HTMLElement).tagName !== "TEXTAREA" || e.ctrlKey)) {
+        e.preventDefault();
+        submit();
+      }
+    });
+    document.body.append(back);
+    (focus ?? ok).focus();
+  });
+}

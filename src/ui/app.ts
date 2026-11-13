@@ -15,7 +15,7 @@ import {
   type ReviewComment,
 } from "../xer/comments";
 import { formatDate, type DurationUnit } from "../xer/format";
-import { compileFilter, emptyFilter, filterActive, type CompiledFilter, type FilterState } from "../xer/filter";
+import { compileFilter, emptyFilter, type CompiledFilter, type FilterState } from "../xer/filter";
 import { applyRollups, type Activity, type Relationship, type Schedule, type Wbs } from "../xer/model";
 import { XerParseError } from "../xer/parse";
 import {
@@ -38,10 +38,10 @@ import { askReviewerName, CommentsPanel, describeTarget, editCommentDialog } fro
 import { MenuBar, popupMenu, type MenuItem } from "./menu";
 import { RelationsPanel } from "./relations";
 import { DEFAULT_HISTOGRAM, ResourcePanel, type HistogramSettings } from "./resources";
-import { FilterBar } from "./filterbar";
+import { filterMenuItems } from "./filter-menu";
 import { showAbout, showShortcuts, showUserGuide } from "./help";
 import { Search } from "./search";
-import { wbsColors } from "./theme";
+import { ROW_HEIGHT, wbsColors } from "./theme";
 import { Toolbar, type ToolItem } from "./toolbar";
 
 const PREFS_KEY = "xer-viewer-prefs-v1";
@@ -137,6 +137,8 @@ export class App {
   private welcome: HTMLElement;
   private status = el("div", "left");
   private statusRight = el("div", "right");
+  /** "Filter on: showing n of m" while anything is filtered (its own slot, so selecting a row can't hide it). */
+  private statusFilter = el("div", "filter-note hidden");
   private bottom: HTMLElement;
   private bottomSplit: HTMLElement;
   private resources: ResourcePanel;
@@ -144,7 +146,6 @@ export class App {
   private sideSplit: HTMLElement;
   private fileInput: HTMLInputElement;
   private appRoot: HTMLElement;
-  private filterBar: FilterBar;
   private filterState: FilterState = emptyFilter();
   private compiled: CompiledFilter = { test: null, errors: new Set() };
   private filterTimer: ReturnType<typeof setTimeout> | undefined;
@@ -229,6 +230,7 @@ export class App {
       { label: "File", items: () => this.fileMenu() },
       { label: "Edit", items: () => this.editMenu() },
       { label: "View", items: () => this.viewMenu() },
+      ...(FEATURES.filters ? [{ label: "Filter", items: () => this.filterMenu() }] : []),
       ...(FEATURES.comments ? [{ label: "Review", items: () => this.reviewMenu() }] : []),
       { label: "Help", items: () => this.helpMenu() },
     ]);
@@ -330,19 +332,12 @@ export class App {
 
     this.toolbar = new Toolbar(this.toolItems());
     this.appRoot = mount;
-    this.filterBar = new FilterBar({
-      state: () => this.filterState,
-      dataDate: () => this.schedule?.projects[0]?.dataDate ?? null,
-      onChange: () => this.applyFilter(),
-      onClear: () => this.clearFilters(),
-    });
     mount.append(
       this.menu.root,
       this.toolbar.root,
-      this.filterBar.root,
       this.workspace,
       this.welcome,
-      el("div", "statusbar", [this.status, this.statusRight]),
+      el("div", "statusbar", [this.status, this.statusFilter, this.statusRight]),
       this.fileInput,
       this.importInput,
     );
@@ -403,8 +398,6 @@ export class App {
       this.filterState = emptyFilter();
       this.compiled = { test: null, errors: new Set() };
       this.view.filter = null;
-      this.filterBar.sync();
-      this.filterBar.setCount(0, 0, false);
       this.resources.reset();
       this.view.expanded = expandedToLevel(schedule, FEATURES.defaultExpandLevel);
       this.view.columns = new Map(scheduleColumns(schedule).map((c) => [c.key, c]));
@@ -414,7 +407,8 @@ export class App {
       this.workspace.classList.remove("hidden");
       this.applyPanelVisibility();
       this.grid.syncFilterValues();
-      this.rebuild();
+      // A new file starts unfiltered; this also resets the status bar and toolbar.
+      this.applyFilter();
       let first: number | null = null;
       let last: number | null = null;
       for (const r of schedule.roots) {
@@ -467,6 +461,25 @@ export class App {
     this.rows.forEach((r, i) => this.rowIndex.set(r.kind === "wbs" ? r.wbs : r.act, i));
     this.grid.render();
     this.gantt.update();
+  }
+
+  /**
+   * Rebuilds after a filter change without losing the selected row: if it was on screen
+   * it stays at the same height; if the filter had hidden it, it's centred when it comes
+   * back. The selection itself is never dropped by filtering.
+   */
+  private rebuildKeepingSelection(): void {
+    const before = this.selectedIndex();
+    const top = this.grid.scrollTop;
+    const offset = before * ROW_HEIGHT - top;
+    const wasOnScreen = before >= 0 && offset >= 0 && offset < this.grid.body.clientHeight;
+    this.rebuild();
+    const after = this.selectedIndex();
+    if (after < 0) return;
+    if (wasOnScreen) this.grid.scrollTop = Math.max(0, after * ROW_HEIGHT - offset);
+    else if (before < 0) this.grid.scrollToIndex(after, true);
+    else return;
+    this.gantt.scrollTop = this.grid.scrollTop;
   }
 
   private selectedIndex(): number {
@@ -633,17 +646,9 @@ export class App {
       { label: "Collapse All", enabled: loaded, action: () => this.setExpanded(new Set()) },
       { label: "Expand To", enabled: loaded, items: () => levels },
     );
-    const filterSort: MenuItem[] = [];
-    if (FEATURES.filters) {
-      filterSort.push(
-        { label: "Filters", key: "Ctrl+Shift+F", checked: () => this.prefs.showFilters, enabled: loaded, action: () => this.toggleFilters() },
-        { label: "Clear Filters", enabled: () => this.compiled.test !== null, action: () => this.clearFilters() },
-      );
-    }
     if (FEATURES.sorting) {
-      filterSort.push({ label: "Clear Sort", enabled: () => this.view.sort !== null, action: () => this.clearSort() });
+      items.push("-", { label: "Clear Sort", enabled: () => this.view.sort !== null, action: () => this.clearSort() });
     }
-    if (filterSort.length) items.push("-", ...filterSort);
 
     const panels: MenuItem[] = [];
     if (FEATURES.toolbar) {
@@ -746,8 +751,17 @@ export class App {
     if (FEATURES.search) items.push("-", { icon: "find", title: "Find (Ctrl+F)", enabled: loaded, action: () => this.search.open() });
     if (FEATURES.filters) {
       items.push(
-        { icon: "filter", title: "Filters (Ctrl+Shift+F)", enabled: loaded, pressed: () => this.prefs.showFilters, action: () => this.toggleFilters() },
-        { icon: "clearFilter", title: "Clear Filters", enabled: () => this.compiled.test !== null, action: () => this.clearFilters() },
+        {
+          icon: "filter",
+          title: "Filter menu",
+          enabled: loaded,
+          pressed: () => this.view.filter !== null,
+          action: (b) => {
+            const r = b.getBoundingClientRect();
+            this.menu.openAt("Filter", r.left, r.bottom);
+          },
+        },
+        { icon: "clearFilter", title: "Clear Filters", enabled: () => this.view.filter !== null, action: () => this.clearFilters() },
       );
     }
     if (FEATURES.gantt) {
@@ -784,6 +798,19 @@ export class App {
     }
     items.push("-", { icon: "help", title: "User Guide (F1)", action: () => showUserGuide() });
     return items;
+  }
+
+  private filterMenu(): MenuItem[] {
+    return filterMenuItems({
+      state: () => this.filterState,
+      loaded: () => this.schedule !== null,
+      dataDate: () => this.schedule?.projects[0]?.dataDate ?? null,
+      onChange: () => this.applyFilter(),
+      onClear: () => this.clearFilters(),
+      active: () => this.view.filter !== null,
+      filterRowShown: () => this.prefs.showFilters,
+      toggleFilterRow: () => this.toggleFilters(),
+    });
   }
 
   private helpMenu(): MenuItem[] {
@@ -1100,27 +1127,27 @@ export class App {
     const test = base && byResource ? (a: Activity) => base(a) && byResource(a) : base ?? byResource;
     this.view.filter = test;
     applyRollups(s.roots, test ?? undefined);
-    this.rebuild();
+    this.rebuildKeepingSelection();
     this.grid.updateFilterErrors();
     const shown = test ? s.activities.reduce((n, a) => n + (test(a) ? 1 : 0), 0) : s.activities.length;
-    const note = byResource ? `Resource: ${this.resources.selectionLabel()}` : "";
-    this.filterBar.setCount(shown, s.activities.length, test !== null, note);
     this.grid.setEmptyMessage(test && shown === 0 ? "No activities match the current filters." : null);
-    this.filterStatus(test ? shown : null);
+    this.filterStatus(test ? shown : null, byResource ? this.resources.selectionLabel() : "");
     this.toolbar.refresh();
   }
 
   /**
-   * Column filters can be set from the header funnels with the filter section hidden; the
-   * status bar then says how many activities are showing. `shown` is null when unfiltered.
+   * While anything is filtered the status bar says so and how many activities show, so
+   * nothing is ever filtered out of sight. `shown` is null when unfiltered; `resource`
+   * names the Resource Usage selection when that is filtering too.
    */
-  private filterStatus(shown: number | null): void {
+  private filterStatus(shown: number | null, resource = ""): void {
     const total = this.schedule?.activities.length ?? 0;
-    if (shown !== null && !this.prefs.showFilters) {
-      this.setStatus(`Filter on: showing ${shown.toLocaleString()} of ${total.toLocaleString()} activities. View > Clear Filters to remove.`);
-    } else if (this.status.textContent?.startsWith("Filter on")) {
-      this.setStatus("");
-    }
+    this.statusFilter.classList.toggle("hidden", shown === null);
+    this.statusFilter.textContent =
+      shown === null
+        ? ""
+        : `Filter on${resource ? ` (resource: ${resource})` : ""}: showing ${shown.toLocaleString()} of ${total.toLocaleString()} activities`;
+    this.statusFilter.title = "Filter > Clear Filters to remove";
   }
 
   private resourceTabShown(): boolean {
@@ -1158,30 +1185,22 @@ export class App {
   private clearFilters(): void {
     this.resources.selectAll();
     this.filterState = emptyFilter();
-    this.filterBar.sync();
     this.grid.syncFilterValues();
     this.applyFilter();
   }
 
+  /** Filter > Filter Row (Ctrl+Shift+F): the text boxes under the column headers. */
   private toggleFilters(): void {
     this.prefs.showFilters = !this.prefs.showFilters;
     this.savePrefs();
-    // The filter bar's own filters would be invisible once hidden, so they're cleared. Column
-    // filters stay: their header funnels stay highlighted and the status bar says so.
-    if (!this.prefs.showFilters && filterActive(this.filterState)) {
-      Object.assign(this.filterState, { statuses: new Set(), criticalOnly: false, milestonesOnly: false, commentedOnly: false, from: null, to: null });
-      this.filterBar.sync();
-      this.applyFilter();
-    }
-    // Shown again: the filter bar has the count, so drop the status bar note.
-    if (this.prefs.showFilters) this.filterStatus(null);
+    // Typed filters stay on while the row is hidden: their funnels stay highlighted and
+    // the status bar keeps the count.
     this.applyPanelVisibility();
     this.grid.render();
   }
 
   private applyPanelVisibility(): void {
     const f = FEATURES.filters && this.prefs.showFilters && this.schedule !== null;
-    this.filterBar.root.classList.toggle("hidden", !f);
     this.appRoot.classList.toggle("filters-on", f);
     const g = FEATURES.gantt && this.prefs.showGantt;
     const r = FEATURES.relationships && this.prefs.showRelations;
