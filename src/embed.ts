@@ -4,6 +4,8 @@
 import { COMMENTS_ELEMENT_ID, parseComments, serializeComments, type ReviewComment } from "./xer/comments";
 
 const EMBED_ID = "xer-embedded";
+/** The baseline .xer (File > Compare with Baseline), saved alongside so recipients see the comparison. */
+const BASELINE_ID = "xer-baseline";
 
 /**
  * The page as it was before the app touched the DOM. Must be captured at startup,
@@ -14,6 +16,7 @@ let pristine = "";
 export function capturePristineHtml(): void {
   const clone = document.documentElement.cloneNode(true) as HTMLElement;
   clone.querySelector(`#${EMBED_ID}`)?.remove();
+  clone.querySelector(`#${BASELINE_ID}`)?.remove();
   clone.querySelector(`#${COMMENTS_ELEMENT_ID}`)?.remove();
   pristine = "<!DOCTYPE html>\n" + clone.outerHTML;
 }
@@ -29,13 +32,18 @@ export interface EmbeddedFile {
   bytes: Uint8Array;
 }
 
-export async function readEmbedded(): Promise<EmbeddedFile | null> {
-  const node = document.getElementById(EMBED_ID);
+export async function readEmbedded(id = EMBED_ID): Promise<EmbeddedFile | null> {
+  const node = document.getElementById(id);
   if (!node?.textContent) return null;
   const gz = base64ToBytes(node.textContent.trim());
   const stream = new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
   return { name: node.dataset.name || "schedule.xer", bytes };
+}
+
+/** The baseline saved inside this page, if any. */
+export function readEmbeddedBaseline(): Promise<EmbeddedFile | null> {
+  return readEmbedded(BASELINE_ID);
 }
 
 /** The schedule inside another saved viewer file (given as text), if it has one. */
@@ -47,12 +55,18 @@ export async function extractEmbeddedXer(html: string): Promise<EmbeddedFile | n
   return { name: name || "schedule.xer", bytes: new Uint8Array(await new Response(stream).arrayBuffer()) };
 }
 
-export async function buildEmbeddedHtml(file: EmbeddedFile, comments: ReviewComment[] = []): Promise<string> {
+async function gzipBase64(bytes: Uint8Array): Promise<string> {
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+  return bytesToBase64(new Uint8Array(await new Response(stream).arrayBuffer()));
+}
+
+export async function buildEmbeddedHtml(file: EmbeddedFile, comments: ReviewComment[] = [], baseline: EmbeddedFile | null = null): Promise<string> {
   if (!pristine) throw new Error("Page source was not captured at startup.");
-  const stream = new Blob([file.bytes]).stream().pipeThrough(new CompressionStream("gzip"));
-  const gz = new Uint8Array(await new Response(stream).arrayBuffer());
   const close = "<" + "/script>";
-  let tag = `<script id="${EMBED_ID}" type="application/x-xer-gzip-base64" data-name="${escapeAttr(file.name)}">${bytesToBase64(gz)}${close}`;
+  let tag = `<script id="${EMBED_ID}" type="application/x-xer-gzip-base64" data-name="${escapeAttr(file.name)}">${await gzipBase64(file.bytes)}${close}`;
+  if (baseline) {
+    tag += `\n<script id="${BASELINE_ID}" type="application/x-xer-gzip-base64" data-name="${escapeAttr(baseline.name)}">${await gzipBase64(baseline.bytes)}${close}`;
+  }
   // Deleted comments are kept too, so merging this file can't bring them back.
   if (comments.length) tag += `\n<script id="${COMMENTS_ELEMENT_ID}" type="application/json">${serializeComments(comments)}${close}`;
   const at = pristine.lastIndexOf("</body>");

@@ -309,7 +309,8 @@ export class Grid {
           lead += `<span class="cbadge${open ? "" : " alldone"}" title="${tip}">${open || done}</span>`;
         }
       }
-      const title = text.length > 20 || c.html ? ` title="${esc(text)}"` : "";
+      const cellTip = row.kind === "act" && c.tip ? c.tip(row.act, ctx) : "";
+      const title = cellTip ? ` title="${esc(cellTip)}"` :text.length > 20 || c.html ? ` title="${esc(text)}"` : "";
       const content = c.html && row.kind === "act" ? c.html(row.act) : esc(text);
       cells += `<div class="cell${align}" style="width:${w}px">${lead}<span class="txt"${title}>${content}</span></div>`;
     });

@@ -37,6 +37,22 @@ the changes in P6 yourself. If someone closes the window without saving, the bro
 warns them, and their unsaved comments come back the next time they open the schedule
 in the same browser.
 
+## Seeing what changed since last month
+
+1. Open this month's `.xer`, then **File > Compare with Baseline...** and pick last
+   month's (or any earlier version). Activities are matched by Activity ID.
+2. The grid gets **BL Finish**, **Finish Variance** (baseline minus current in working
+   time, like P6: `-5d` means 5 working days later) and **Change** columns; more are
+   under **Baseline** in the Columns dialog. The Gantt draws a thin yellow baseline bar
+   under each bar.
+3. The **Changes** tab lists every change: added and deleted activities, finish later
+   or earlier, start moved, original duration, predecessors added or removed or with a
+   new lag, constraints, progress, renames, calendar and WBS moves. Pick a category,
+   sort, click a row to go to the activity, or **Filter Activities** to show just those.
+   **Filter > Changes vs Baseline** does the same from the menu.
+4. **File > Save Viewer with Schedule** keeps the baseline inside the saved file, so
+   recipients see the comparison too.
+
 ## Using it
 
 - **Toolbar**: the everyday commands as buttons under the menus (Open, Save, Export
@@ -88,10 +104,22 @@ in the same browser.
   average crew for the month.
 - **Relationships**: select an activity to see its predecessors and successors
   (type and lag) below. Double-click one to jump to it.
+- **Trace Logic** (**Filter > Trace Logic**, or right-click an activity): show only
+  the activity's driving predecessors (its driving path), driving successors, both,
+  or all predecessors / successors. The WBS bands they sit in are opened. **Clear
+  Trace** or **Clear Filters** goes back.
+- **Copy** (**Edit > Copy**, Ctrl+C): the selected activity, or a WBS band with every
+  row shown under it, as a table with the grid's columns, for pasting into an email,
+  Teams, Word or Excel (WBS colours kept). **Edit > Copy All Rows as Shown** copies the
+  whole filtered view, e.g. a traced driving path.
+- **Calendars** (**View > Calendars...**): each calendar's work week and a year view
+  of its holidays and changed-hours days.
 - **Find**: Ctrl+F, then Enter / F3 for next and Shift+Enter / Shift+F3 for previous.
 - **Bottom panel**: **View > Show on Bottom** picks Relationships, Resource Usage,
-  Comments or None, like P6.
+  Comments, Changes or None, like P6.
 - **Gantt**: Ctrl+mouse wheel to zoom, **View > Zoom** and **View > Go to Data Date**.
+  Double-click a row in the Gantt to zoom to its bar, like P6 (also **View > Zoom >
+  Zoom to Selected**).
   Driving relationships are drawn as arrows (red on the critical path). Choose
   **View > Relationship Lines > None / Driving Only / All**. The selected
   activity's lines are drawn thicker.

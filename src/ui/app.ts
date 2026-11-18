@@ -1,8 +1,11 @@
 // Wires the model, grid, Gantt, panels, menus and keyboard together.
-import { buildEmbeddedHtml, downloadText, extractEmbeddedXer } from "../embed";
+import { buildEmbeddedHtml, downloadText, extractEmbeddedXer, type EmbeddedFile } from "../embed";
 import { FEATURES } from "../features";
 import { loadSchedule } from "../xer";
-import { COLUMN_BY_KEY, COLUMNS, scheduleColumns, type Column } from "../xer/columns";
+import { BASELINE_DEFAULT_COLUMNS, COLUMN_BY_KEY, COLUMNS, scheduleColumns, type Column } from "../xer/columns";
+import { bandRows, rowsToTable, type CopiedTable } from "../xer/clipboard";
+import { compareSchedules, type ChangeKind, type Comparison } from "../xer/compare";
+import { describeTrace, traceLogic, type TraceSpec } from "../xer/trace";
 import {
   extractCommentsFromHtml,
   liveComments,
@@ -14,7 +17,7 @@ import {
   targetKey,
   type ReviewComment,
 } from "../xer/comments";
-import { formatDate, type DurationUnit } from "../xer/format";
+import { formatDate, isMilestone, type DurationUnit } from "../xer/format";
 import { compileFilter, emptyFilter, type CompiledFilter, type FilterState } from "../xer/filter";
 import { applyRollups, type Activity, type Relationship, type Schedule, type Wbs } from "../xer/model";
 import { XerParseError } from "../xer/parse";
@@ -38,7 +41,9 @@ import { askReviewerName, CommentsPanel, describeTarget, editCommentDialog } fro
 import { MenuBar, popupMenu, type MenuItem } from "./menu";
 import { RelationsPanel } from "./relations";
 import { DEFAULT_HISTOGRAM, ResourcePanel, type HistogramSettings } from "./resources";
-import { filterMenuItems } from "./filter-menu";
+import { filterMenuItems, traceMenuItems } from "./filter-menu";
+import { ChangesPanel } from "./changes";
+import { showCalendars } from "./calendars";
 import { showAbout, showShortcuts, showUserGuide } from "./help";
 import { Search } from "./search";
 import { ROW_HEIGHT, wbsColors } from "./theme";
@@ -62,7 +67,7 @@ interface Prefs {
   reviewer: string;
 }
 
-type BottomTab = "relationships" | "resources" | "comments";
+type BottomTab = "relationships" | "resources" | "comments" | "changes";
 
 /** Unsaved comments are also kept here, per project, so closing the tab doesn't lose them. */
 const DRAFT_KEY = "xer-viewer-comment-draft:";
@@ -158,6 +163,13 @@ export class App {
   private commentsPanel!: CommentsPanel;
   private commentsTab: HTMLElement | null = null;
   private importInput!: HTMLInputElement;
+  /** File > Compare with Baseline: the baseline file and its parsed schedule. */
+  private baselineFile: EmbeddedFile | null = null;
+  private baseline: Schedule | null = null;
+  private baselineInput!: HTMLInputElement;
+  private changesPanel!: ChangesPanel;
+  /** Rows waiting for the copy event (Edit menu copies go through execCommand). */
+  private pendingCopy: CopiedTable | null = null;
 
   constructor(mount: HTMLElement) {
     this.grid = new Grid({
@@ -207,8 +219,23 @@ export class App {
       selectedIndex: () => this.selectedIndex(),
       dataDate: () => this.schedule?.projects[0]?.dataDate ?? null,
       onSelect: (i) => this.select(i),
-      onActivate: (i) => this.activate(i),
+      // Like P6: double-clicking a row in the Gantt brings its bar into view.
+      onDoubleClick: (i) => {
+        this.select(i);
+        this.zoomToRow(i);
+      },
       onScroll: (top) => (this.grid.scrollTop = top),
+      baseline: (row) => {
+        const cmp = this.cmp;
+        if (!cmp) return null;
+        if (row.kind === "act") {
+          const b = cmp.changes.get(row.act)?.base;
+          return b ? [b.start, b.finish] : null;
+        }
+        const w = cmp.wbs.get(row.wbs);
+        return w ? [w.start, w.finish] : null;
+      },
+      showBaseline: () => this.cmp !== null,
       onDraw: () => {
         if (this.resourceTabShown()) this.resources.draw();
       },
@@ -285,15 +312,27 @@ export class App {
     });
     const cmRow = el("div", "brow", [this.commentsPanel.root]);
 
+    this.changesPanel = new ChangesPanel({
+      comparison: () => this.cmp,
+      unit: () => this.view.ctx.unit,
+      goTo: (a) => this.goTo(a),
+      onCompare: () => this.baselineInput.click(),
+      onRemove: () => this.removeBaseline(),
+      onFilter: (k) => this.filterChanges(k),
+    });
+    const chRow = el("div", "brow", [this.changesPanel.root]);
+
     const tabs: [BottomTab, string, HTMLElement][] = [
       ["relationships", "Relationships", relRow],
       ["resources", "Resource Usage", resRow],
       ["comments", "Comments", cmRow],
+      ["changes", "Changes", chRow],
     ];
     const tabStrip = el("div", "btabs");
     for (const [id, label, body] of tabs) {
       if (id === "resources" && !FEATURES.resourceHistogram) continue;
       if (id === "comments" && !FEATURES.comments) continue;
+      if (id === "changes" && !FEATURES.baselineCompare) continue;
       const tab = el("div", "btab", [label]);
       tab.dataset.tab = id;
       tab.addEventListener("mousedown", () => this.setBottomTab(id));
@@ -302,7 +341,7 @@ export class App {
       if (id === "comments") this.commentsTab = tab;
     }
 
-    this.bottom = el("div", "bottom", [tabStrip, relRow, resRow, cmRow]);
+    this.bottom = el("div", "bottom", [tabStrip, relRow, resRow, cmRow, chRow]);
     this.bottomSplit = splitter("h", () => (this.dragStart = this.bottom.getBoundingClientRect().height), (d) => {
       this.bottom.style.height = `${Math.max(60, Math.min(this.workspace.clientHeight - 120, this.dragStart - d))}px`;
     });
@@ -330,6 +369,17 @@ export class App {
       if (files.length) void this.importComments(files);
     });
 
+    // File > Compare with Baseline: an earlier .xer (or saved viewer) to compare with.
+    this.baselineInput = el("input");
+    this.baselineInput.type = "file";
+    this.baselineInput.accept = ".xer,.html,.htm";
+    this.baselineInput.className = "hidden";
+    this.baselineInput.addEventListener("change", () => {
+      const f = this.baselineInput.files?.[0];
+      this.baselineInput.value = "";
+      if (f) void this.openBaseline(f);
+    });
+
     this.toolbar = new Toolbar(this.toolItems());
     this.appRoot = mount;
     mount.append(
@@ -340,10 +390,12 @@ export class App {
       el("div", "statusbar", [this.status, this.statusFilter, this.statusRight]),
       this.fileInput,
       this.importInput,
+      this.baselineInput,
     );
     this.applyPanelVisibility();
     this.installKeys();
     this.installDrop();
+    this.installCopy();
     // Comments only persist when saved into the HTML file: warn before they're lost.
     window.addEventListener("beforeunload", (e) => {
       if (!this.commentsDirty) return;
@@ -401,6 +453,8 @@ export class App {
       this.resources.reset();
       this.view.expanded = expandedToLevel(schedule, FEATURES.defaultExpandLevel);
       this.view.columns = new Map(scheduleColumns(schedule).map((c) => [c.key, c]));
+      // A loaded baseline stays: compare the newly opened file with it.
+      this.recompare();
       this.updateRelLines();
       const recovered = this.loadComments(comments);
       this.welcome.classList.add("hidden");
@@ -416,6 +470,8 @@ export class App {
         if (r.finish !== null && (last === null || r.finish > last)) last = r.finish;
       }
       this.gantt.setRange(first, last);
+      this.extendGanttForBaseline();
+      this.changesPanel.render();
       this.grid.scrollTop = 0;
       this.gantt.scrollTop = 0;
       this.showRelations(null);
@@ -541,6 +597,21 @@ export class App {
     this.gantt.reveal(a);
   }
 
+  /** Zooms the Gantt so the row's bar fills the middle of the chart. */
+  private zoomToRow(i: number): void {
+    const row = this.rows[i];
+    if (!row || !FEATURES.gantt || !this.prefs.showGantt) return;
+    let s: number | null;
+    let f: number | null;
+    if (row.kind === "wbs") [s, f] = [row.wbs.start, row.wbs.finish];
+    else if (isMilestone(row.act.type)) s = f = row.act.type === "TT_Mile" ? row.act.start : row.act.finish ?? row.act.start;
+    else [s, f] = [row.act.start, row.act.finish];
+    s ??= f;
+    f ??= s;
+    if (s === null || f === null) return;
+    this.gantt.focusRange(s, f);
+  }
+
   private toggleSort(key: string): void {
     const s = this.view.sort;
     // Ascending -> descending -> back to the default order.
@@ -573,6 +644,13 @@ export class App {
     if (FEATURES.embedSave) {
       items.push({ label: "Save Viewer with Schedule...", key: "Ctrl+S", enabled: loaded, action: () => void this.saveEmbedded() });
     }
+    if (FEATURES.baselineCompare) {
+      items.push(
+        "-",
+        { label: "Compare with Baseline...", enabled: loaded, action: () => this.baselineInput.click() },
+        { label: "Remove Baseline", enabled: () => this.cmp !== null, action: () => this.removeBaseline() },
+      );
+    }
     if (FEATURES.excelExport) {
       items.push("-", {
         label: "Export to Excel",
@@ -587,13 +665,23 @@ export class App {
   }
 
   private editMenu(): MenuItem[] {
-    if (!FEATURES.search) return [{ label: "(no edit commands)", enabled: () => false }];
     const loaded = () => this.schedule !== null;
-    return [
-      { label: "Find...", key: "Ctrl+F", enabled: loaded, action: () => this.search.open() },
-      { label: "Find Next", key: "F3", enabled: loaded, action: () => this.search.find(1) },
-      { label: "Find Previous", key: "Shift+F3", enabled: loaded, action: () => this.search.find(-1) },
-    ];
+    const items: MenuItem[] = [];
+    if (FEATURES.copyRows) {
+      items.push(
+        { label: "Copy", key: "Ctrl+C", enabled: () => loaded() && this.selectedIndex() >= 0, action: () => this.copySelected() },
+        { label: "Copy All Rows as Shown", enabled: loaded, action: () => this.copyRows(this.rows) },
+      );
+    }
+    if (FEATURES.search) {
+      if (items.length) items.push("-");
+      items.push(
+        { label: "Find...", key: "Ctrl+F", enabled: loaded, action: () => this.search.open() },
+        { label: "Find Next", key: "F3", enabled: loaded, action: () => this.search.find(1) },
+        { label: "Find Previous", key: "Shift+F3", enabled: loaded, action: () => this.search.find(-1) },
+      );
+    }
+    return items.length ? items : [{ label: "(no edit commands)", enabled: () => false }];
   }
 
   private viewMenu(): MenuItem[] {
@@ -628,6 +716,7 @@ export class App {
               this.grid.render();
               this.preds.render();
               this.succs.render();
+              this.changesPanel.render();
             },
           })),
       },
@@ -641,6 +730,9 @@ export class App {
           this.rebuild();
         },
       },
+    );
+    if (FEATURES.calendars) items.push({ label: "Calendars...", enabled: loaded, action: () => this.openCalendars() });
+    items.push(
       "-",
       { label: "Expand All", enabled: loaded, action: () => this.setExpanded(expandedAll(s())) },
       { label: "Collapse All", enabled: loaded, action: () => this.setExpanded(new Set()) },
@@ -678,6 +770,7 @@ export class App {
       const tabs: [BottomTab, string][] = [["relationships", "Relationships"]];
       if (FEATURES.resourceHistogram) tabs.push(["resources", "Resource Usage"]);
       if (FEATURES.comments) tabs.push(["comments", "Comments"]);
+      if (FEATURES.baselineCompare) tabs.push(["changes", "Changes"]);
       panels.push({
         label: "Show on Bottom",
         items: () => [
@@ -720,6 +813,13 @@ export class App {
             { label: "Zoom In", key: "Ctrl+Wheel", action: () => this.gantt.zoom(1.5) },
             { label: "Zoom Out", action: () => this.gantt.zoom(1 / 1.5) },
             { label: "Zoom to Fit", action: () => this.gantt.fit() },
+            "-",
+            {
+              label: "Zoom to Selected",
+              key: "Double-click",
+              enabled: () => this.selectedIndex() >= 0,
+              action: () => this.zoomToRow(this.selectedIndex()),
+            },
           ],
         },
         {
@@ -810,6 +910,9 @@ export class App {
       active: () => this.view.filter !== null,
       filterRowShown: () => this.prefs.showFilters,
       toggleFilterRow: () => this.toggleFilters(),
+      comparison: () => FEATURES.baselineCompare && this.cmp !== null,
+      selected: () => (FEATURES.traceLogic && this.selected && isActivity(this.selected) ? this.selected : null),
+      setTrace: (t) => this.setTrace(t),
     });
   }
 
@@ -909,17 +1012,33 @@ export class App {
   }
 
   private rowMenu(i: number, x: number, y: number): void {
-    if (!FEATURES.comments) return;
     const row = this.rows[i];
     if (!row) return;
     const item = row.kind === "wbs" ? row.wbs : row.act;
-    const counts = this.commentIndex.get(rowKey(row));
-    const items: MenuItem[] = [{ label: "Add Comment...", key: "Ctrl+M", action: () => void this.addComment(item) }];
-    if (counts) items.push({ label: `Show Comments (${counts[0] + counts[1]})`, action: () => this.showCommentsTab() });
-    if (row.kind === "wbs") {
-      items.push("-", { label: this.view.expanded.has(row.wbs.id) ? "Collapse" : "Expand", action: () => this.toggle(i) });
+    const items: MenuItem[] = [];
+    const sep = () => items.length && items[items.length - 1] !== "-" && items.push("-");
+    if (FEATURES.comments) {
+      const counts = this.commentIndex.get(rowKey(row));
+      items.push({ label: "Add Comment...", key: "Ctrl+M", action: () => void this.addComment(item) });
+      if (counts) items.push({ label: `Show Comments (${counts[0] + counts[1]})`, action: () => this.showCommentsTab() });
     }
-    popupMenu(items, x, y);
+    if (FEATURES.copyRows) {
+      sep();
+      items.push({ label: row.kind === "wbs" ? "Copy Band and Rows Under It" : "Copy Row", key: "Ctrl+C", action: () => this.copySelected() });
+    }
+    if (FEATURES.traceLogic && row.kind === "act") {
+      sep();
+      items.push({ label: "Trace Logic", items: () => traceMenuItems(row.act, this.filterState.trace, (t) => this.setTrace(t)) });
+    }
+    if (FEATURES.gantt && this.prefs.showGantt) {
+      sep();
+      items.push({ label: "Zoom to Bar", key: "Double-click", action: () => this.zoomToRow(i) });
+    }
+    if (row.kind === "wbs") {
+      sep();
+      items.push({ label: this.view.expanded.has(row.wbs.id) ? "Collapse" : "Expand", action: () => this.toggle(i) });
+    }
+    if (items.length) popupMenu(items, x, y);
   }
 
   /** Asks for the reviewer's name if we don't have one (or `force`). Returns it, or null if cancelled. */
@@ -1131,7 +1250,11 @@ export class App {
     this.grid.updateFilterErrors();
     const shown = test ? s.activities.reduce((n, a) => n + (test(a) ? 1 : 0), 0) : s.activities.length;
     this.grid.setEmptyMessage(test && shown === 0 ? "No activities match the current filters." : null);
-    this.filterStatus(test ? shown : null, byResource ? this.resources.selectionLabel() : "");
+    const notes: string[] = [];
+    if (byResource) notes.push(`resource: ${this.resources.selectionLabel()}`);
+    if (this.filterState.trace) notes.push(`trace: ${describeTrace(this.filterState.trace)}`);
+    if (this.filterState.changes.size) notes.push("changes vs baseline");
+    this.filterStatus(test ? shown : null, notes);
     this.toolbar.refresh();
   }
 
@@ -1140,13 +1263,13 @@ export class App {
    * nothing is ever filtered out of sight. `shown` is null when unfiltered; `resource`
    * names the Resource Usage selection when that is filtering too.
    */
-  private filterStatus(shown: number | null, resource = ""): void {
+  private filterStatus(shown: number | null, notes: string[] = []): void {
     const total = this.schedule?.activities.length ?? 0;
     this.statusFilter.classList.toggle("hidden", shown === null);
     this.statusFilter.textContent =
       shown === null
         ? ""
-        : `Filter on${resource ? ` (resource: ${resource})` : ""}: showing ${shown.toLocaleString()} of ${total.toLocaleString()} activities`;
+        : `Filter on${notes.length ? ` (${notes.join("; ")})` : ""}: showing ${shown.toLocaleString()} of ${total.toLocaleString()} activities`;
     this.statusFilter.title = "Filter > Clear Filters to remove";
   }
 
@@ -1165,7 +1288,11 @@ export class App {
   private applyBottomTab(): void {
     const t = this.prefs.bottomTab;
     const tab =
-      (t === "resources" && !FEATURES.resourceHistogram) || (t === "comments" && !FEATURES.comments) ? "relationships" : t;
+      (t === "resources" && !FEATURES.resourceHistogram) ||
+      (t === "comments" && !FEATURES.comments) ||
+      (t === "changes" && !FEATURES.baselineCompare)
+        ? "relationships"
+        : t;
     for (const n of this.bottom.querySelectorAll<HTMLElement>("[data-tab]")) {
       if (n.classList.contains("btab")) n.classList.toggle("active", n.dataset.tab === tab);
       else n.classList.toggle("hidden", n.dataset.tab !== tab);
@@ -1175,6 +1302,7 @@ export class App {
       this.resources.draw();
     }
     if (tab === "comments") this.commentsPanel.render();
+    if (tab === "changes") this.changesPanel.render();
   }
 
   /** The resource list matches the grid's width so the histogram lines up under the Gantt. */
@@ -1222,7 +1350,7 @@ export class App {
       modal("Not available in dev mode", "<p>Run <code>npm run build</code> and use <code>dist/xer-viewer-v*.html</code> to save a viewer with the schedule inside.</p>");
       return;
     }
-    const html = await buildEmbeddedHtml({ name: this.fileName, bytes: this.fileBytes }, this.comments);
+    const html = await buildEmbeddedHtml({ name: this.fileName, bytes: this.fileBytes }, this.comments, this.baselineFile);
     // A reviewer's copy is named after them, so files coming back don't overwrite each other.
     const base = this.fileName.replace(/\.xer$/i, "");
     const mine = liveComments(this.comments).some((c) => c.author === this.prefs.reviewer);
@@ -1241,6 +1369,7 @@ export class App {
     this.setStatus(
       `Saved ${fileName} (${(html.length / 1_048_576).toFixed(1)} MB)` +
         (n ? ` with ${n} comment${n === 1 ? "" : "s"}` : "") +
+        (this.baselineFile ? ` and the baseline ${this.baselineFile.name}` : "") +
         `. Send that one file: it opens straight to this schedule.`,
     );
   }
@@ -1367,6 +1496,8 @@ export class App {
     if (f.commentedOnly) other.push("With comments");
     if (f.from !== null || f.to !== null) other.push(`Active between ${formatDate(f.from) || "..."} and ${formatDate(f.to) || "..."}`);
     if (this.resourceTabShown() && this.resources.activityFilter()) other.push(`Resource: ${this.resources.selectionLabel()}`);
+    if (f.trace) other.push(`Trace: ${describeTrace(f.trace)}`);
+    if (f.changes.size) other.push(`Changes vs baseline: ${[...f.changes].join(", ")}`);
     const p = this.schedule?.projects[0];
     const sort = this.view.sort;
     const units = { h: "Hours", d: "Days", w: "Weeks", m: "Months" } as const;
@@ -1380,10 +1511,196 @@ export class App {
       ["Column filters", columnFilters.join("; ") || "None"],
       ["Other filters", other.join("; ") || "None"],
       ["Duration unit", units[this.view.ctx.unit]],
+      ["Baseline", this.baselineFile ? this.baselineFile.name : "None"],
       ["Exported with", `XER Viewer ${__APP_VERSION__}`],
       ["Note", "Dates are exported as Excel dates; P6 actual (A) and constraint (*) markers are not carried across."],
     ];
   }
+
+  // ---------- Baseline comparison ----------
+
+  private get cmp(): Comparison | null {
+    return this.view.ctx.cmp ?? null;
+  }
+
+  /** Compares the open schedule with the loaded baseline (if any). */
+  private recompare(): void {
+    const cmp = this.schedule && this.baseline && this.baselineFile ? compareSchedules(this.schedule, this.baseline, this.baselineFile.name) : null;
+    this.view.ctx = { ...this.view.ctx, cmp };
+  }
+
+  /** File > Compare with Baseline: an earlier .xer, or a saved viewer .html with one inside. */
+  private async openBaseline(file: File): Promise<void> {
+    if (!/\.html?$/i.test(file.name)) {
+      await this.setBaseline(file.name, new Uint8Array(await file.arrayBuffer()));
+      return;
+    }
+    const embedded = await extractEmbeddedXer(await file.text()).catch(() => null);
+    if (!embedded) {
+      modal("Can't open baseline", `<p><b>${esc(file.name)}</b></p><p>This HTML file doesn't contain a schedule.</p>`);
+      return;
+    }
+    await this.setBaseline(embedded.name, embedded.bytes);
+  }
+
+  async setBaseline(name: string, bytes: Uint8Array): Promise<void> {
+    if (!this.schedule) return;
+    const overlay = el("div", "overlay", [el("div", "box", [`Comparing with ${name}…`])]);
+    document.body.append(overlay);
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      const baseline = loadSchedule(bytes);
+      if (!baseline.activities.length) throw new XerParseError("The baseline has no activities in it.");
+      const first = this.cmp === null;
+      this.baseline = baseline;
+      this.baselineFile = { name, bytes };
+      this.recompare();
+      // The first time, show the main baseline columns unless some are showing already.
+      const shown = this.columns().map((c) => c.key);
+      if (first && !shown.some((k) => this.view.columns.get(k)?.group === "Baseline")) {
+        const at = shown.indexOf("finish");
+        const add = BASELINE_DEFAULT_COLUMNS.filter((k) => this.view.columns.has(k));
+        this.setColumns(at < 0 ? [...shown, ...add] : [...shown.slice(0, at + 1), ...add, ...shown.slice(at + 1)]);
+      } else {
+        this.applyFilter();
+      }
+      this.extendGanttForBaseline();
+      this.grid.render();
+      this.gantt.draw();
+      const cmp = this.cmp!;
+      const n = (k: ChangeKind) => (cmp.counts.get(k) ?? 0).toLocaleString();
+      this.showBottom("changes");
+      this.changesPanel.render();
+      const total = cmp.changes.size;
+      const matched = total - (cmp.counts.get("added") ?? 0);
+      this.setStatus(
+        matched < total / 2
+          ? `Only ${matched.toLocaleString()} of ${total.toLocaleString()} activities have the same Activity ID in ${name}. Is it an earlier version of this project?`
+          : `Compared with ${name}: ${n("added")} added, ${cmp.deleted.length.toLocaleString()} deleted, ` +
+              `${n("finishLater")} finishing later, ${n("logic")} with logic changes. Details on the Changes tab.`,
+      );
+    } catch (e) {
+      const msg = e instanceof XerParseError ? e.message : `Could not read this file: ${(e as Error).message}`;
+      modal("Can't open baseline", `<p><b>${esc(name)}</b></p><p>${esc(msg)}</p>`);
+    } finally {
+      overlay.remove();
+    }
+  }
+
+  private removeBaseline(): void {
+    this.baseline = null;
+    this.baselineFile = null;
+    this.recompare();
+    this.filterState.changes.clear();
+    // Baseline columns would only be empty now; loading a baseline brings them back.
+    const shown = this.columns().map((c) => c.key);
+    const keep = shown.filter((k) => this.view.columns.get(k)?.group !== "Baseline");
+    if (keep.length && keep.length < shown.length) this.setColumns(keep);
+    else this.applyFilter();
+    this.grid.render();
+    this.gantt.draw();
+    this.changesPanel.render();
+    this.setStatus("Baseline removed.");
+  }
+
+  /** Makes room on the Gantt for baseline bars outside the schedule's own dates. */
+  private extendGanttForBaseline(): void {
+    const b = this.baseline;
+    if (!b || !this.cmp) return;
+    let first: number | null = null;
+    let last: number | null = null;
+    for (const r of b.roots) {
+      if (r.start !== null && (first === null || r.start < first)) first = r.start;
+      if (r.finish !== null && (last === null || r.finish > last)) last = r.finish;
+    }
+    this.gantt.extendRange(first, last);
+  }
+
+  /** The Changes tab's "Filter Activities": only this kind of change. */
+  private filterChanges(kind: ChangeKind | "any"): void {
+    this.filterState.changes = new Set([kind]);
+    this.applyFilter();
+  }
+
+  // ---------- Trace Logic ----------
+
+  /** Filter > Trace Logic: shows only the traced chain, expanding the WBS it runs through. */
+  private setTrace(t: TraceSpec | null): void {
+    this.filterState.trace = t;
+    if (t) for (const a of traceLogic(t)) revealActivity(this.view.expanded, a);
+    this.applyFilter();
+    if (!t) return;
+    const i = this.rowIndex.get(t.root);
+    if (i !== undefined) {
+      this.grid.scrollToIndex(i, true);
+      this.select(i);
+    }
+    const n = traceLogic(t).size - 1;
+    this.setStatus(`Tracing ${describeTrace(t)}: ${n.toLocaleString()} activit${n === 1 ? "y" : "ies"}. Filter > Trace Logic > Clear Trace to go back.`);
+  }
+
+  // ---------- Copy ----------
+
+  /** Edit > Copy: the selected activity, or a WBS band with every row shown under it. */
+  private copySelected(): void {
+    const i = this.selectedIndex();
+    if (i >= 0) this.copyRows(bandRows(this.rows, i));
+  }
+
+  private copyRows(rows: GridRow[]): void {
+    if (!rows.length) return;
+    const table = rowsToTable(rows, this.columns(), this.view.ctx, wbsColors);
+    this.pendingCopy = table;
+    // execCommand fires the copy event, which puts both HTML and text on the clipboard.
+    const ok = document.execCommand("copy");
+    if (this.pendingCopy) {
+      this.pendingCopy = null;
+      if (!ok) {
+        void navigator.clipboard?.writeText(table.text);
+      }
+    }
+    this.copied(rows);
+  }
+
+  private copied(rows: GridRow[]): void {
+    const n = rows.length;
+    this.setStatus(`Copied ${n.toLocaleString()} row${n === 1 ? "" : "s"} with the grid's columns. Paste into an email, Teams, Word or Excel.`);
+  }
+
+  /** Ctrl+C on the grid (and the Edit menu, through execCommand) copies rows as a table. */
+  private installCopy(): void {
+    document.addEventListener("copy", (e) => {
+      let table = this.pendingCopy;
+      this.pendingCopy = null;
+      if (!table) {
+        if (!FEATURES.copyRows || !this.schedule) return;
+        // Leave normal copying alone: text boxes, selected text, dialogs.
+        const target = e.target as HTMLElement | null;
+        if (target?.closest?.("input, textarea, select, .modal-back")) return;
+        if (window.getSelection()?.toString()) return;
+        const i = this.selectedIndex();
+        if (i < 0) return;
+        const rows = bandRows(this.rows, i);
+        table = rowsToTable(rows, this.columns(), this.view.ctx, wbsColors);
+        this.copied(rows);
+      }
+      e.clipboardData?.setData("text/plain", table.text);
+      e.clipboardData?.setData("text/html", table.html);
+      e.preventDefault();
+    });
+  }
+
+  // ---------- Calendars ----------
+
+  private openCalendars(): void {
+    const s = this.schedule;
+    if (!s) return;
+    const sel = this.selected;
+    const cal = sel ? (isActivity(sel) ? sel.calendar : sel.calendar) : null;
+    const dd = s.projects[0]?.dataDate;
+    showCalendars(s, cal, new Date(dd ?? Date.now()).getUTCFullYear());
+  }
+
 
   // ---------- Keyboard, drag & drop, status ----------
 

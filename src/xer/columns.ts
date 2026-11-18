@@ -10,6 +10,7 @@ import {
   type Wbs,
 } from "./model";
 import { workMinutesByDay } from "./calendar";
+import { changeSummary, describeChange, varianceHrs, type Comparison } from "./compare";
 import {
   activityTypeName,
   constraintName,
@@ -23,12 +24,14 @@ import {
 
 export interface ColumnContext {
   unit: DurationUnit;
+  /** The loaded baseline comparison, for the Baseline columns. */
+  cmp?: Comparison | null;
 }
 
 export type SortValue = number | string | null;
 
 /** Groups shown in the Columns dialog, in this order (like P6's Available Options). */
-export const COLUMN_GROUPS = ["General", "Activity Codes", "Dates", "Durations", "Percent Complete", "Units", "User Defined Fields"] as const;
+export const COLUMN_GROUPS = ["General", "Activity Codes", "Dates", "Durations", "Percent Complete", "Units", "Baseline", "User Defined Fields"] as const;
 export type ColumnGroup = (typeof COLUMN_GROUPS)[number];
 
 export interface Column {
@@ -43,6 +46,8 @@ export interface Column {
   text(a: Activity, ctx: ColumnContext): string;
   /** Optional rich cell content (trusted HTML); `text` is still used for tooltips. */
   html?(a: Activity): string;
+  /** Optional tooltip for an activity cell (default: the text when it's long). */
+  tip?(a: Activity, ctx: ColumnContext): string;
   wbsText(w: Wbs, ctx: ColumnContext): string;
   sortValue(a: Activity, ctx: ColumnContext): SortValue;
 }
@@ -248,6 +253,152 @@ export const COLUMNS: Column[] = [
   unitsColumn("actNonlabor", "Actual Nonlabor Units", (l) => l.actual, "nonlabor"),
   unitsColumn("remNonlabor", "Remaining Nonlabor Units", (l) => l.remaining, "nonlabor"),
 ];
+
+// ---------- Baseline (File > Compare with Baseline) ----------
+
+const baseOf = (a: Activity, ctx: ColumnContext) => ctx.cmp?.changes.get(a)?.base ?? null;
+const baseWbs = (w: Wbs, ctx: ColumnContext) => ctx.cmp?.wbs.get(w) ?? null;
+
+const blDate = (
+  key: string,
+  label: string,
+  pick: (x: Activity | Wbs) => number | null,
+  actual: (x: Activity | Wbs) => boolean,
+): Column => ({
+  key,
+  label,
+  group: "Baseline",
+  kind: "date",
+  width: 92,
+  align: "left",
+  defaultVisible: false,
+  text: (a, ctx) => {
+    const b = baseOf(a, ctx);
+    return b ? formatDate(pick(b), actual(b)) : "";
+  },
+  wbsText: (w, ctx) => {
+    const b = baseWbs(w, ctx);
+    return b ? formatDate(pick(b), actual(b)) : "";
+  },
+  sortValue: (a, ctx) => {
+    const b = baseOf(a, ctx);
+    return b ? pick(b) : null;
+  },
+});
+
+const varCache = new Map<string, number | null>();
+
+/** WBS band variance on the band's calendar; cached, since bands redraw on every scroll. */
+function wbsVariance(w: Wbs, current: number | null, baseline: number | null): number | null {
+  const cal = wbsCal(w);
+  const key = `${cal.id}|${current}|${baseline}`;
+  if (!varCache.has(key)) {
+    if (varCache.size > 50_000) varCache.clear();
+    varCache.set(key, varianceHrs(cal, current, baseline));
+  }
+  return varCache.get(key)!;
+}
+
+/** Baseline minus current in working time, like P6's variance columns (negative = later). */
+const variance = (key: string, label: string, which: "start" | "finish"): Column => {
+  const hrs = (a: Activity, ctx: ColumnContext) => {
+    const ch = ctx.cmp?.changes.get(a);
+    return ch ? (which === "start" ? ch.startVarHrs : ch.finishVarHrs) : null;
+  };
+  return {
+    key,
+    label,
+    group: "Baseline",
+    kind: "number",
+    width: 80,
+    align: "right",
+    defaultVisible: false,
+    text: (a, ctx) => formatDuration(hrs(a, ctx), a.calendar, ctx.unit),
+    wbsText: (w, ctx) => {
+      const b = baseWbs(w, ctx);
+      if (!b) return "";
+      const h = which === "start" ? wbsVariance(w, w.start, b.start) : wbsVariance(w, w.finish, b.finish);
+      return formatDuration(h, wbsCal(w), ctx.unit);
+    },
+    sortValue: (a, ctx) => {
+      const h = hrs(a, ctx);
+      return h === null ? null : hoursTo(h, a.calendar, ctx.unit);
+    },
+  };
+};
+
+const baselineNumber = (
+  key: string,
+  label: string,
+  hours: (a: Activity, b: Activity) => number | null,
+  wbsText: (w: Wbs, b: Wbs, ctx: ColumnContext) => string,
+  calOf: "base" | "current",
+): Column => ({
+  key,
+  label,
+  group: "Baseline",
+  kind: "number",
+  width: 80,
+  align: "right",
+  defaultVisible: false,
+  text: (a, ctx) => {
+    const b = baseOf(a, ctx);
+    return b ? formatDuration(hours(a, b), calOf === "base" ? b.calendar : a.calendar, ctx.unit) : "";
+  },
+  wbsText: (w, ctx) => {
+    const b = baseWbs(w, ctx);
+    return b ? wbsText(w, b, ctx) : "";
+  },
+  sortValue: (a, ctx) => {
+    const b = baseOf(a, ctx);
+    const h = b ? hours(a, b) : null;
+    return h === null ? null : hoursTo(h, calOf === "base" ? b!.calendar : a.calendar, ctx.unit);
+  },
+});
+
+COLUMNS.push(
+  blDate("blStart", "BL Start", (x) => x.start, (x) => x.startActual),
+  blDate("blFinish", "BL Finish", (x) => x.finish, (x) => x.finishActual),
+  variance("startVar", "Start Variance", "start"),
+  variance("finishVar", "Finish Variance", "finish"),
+  baselineNumber(
+    "blOrigDur",
+    "BL Original Duration",
+    (_a, b) => b.origDurHrs,
+    (_w, b, ctx) => formatDuration(wbsWorkHours(b, false), wbsCal(b), ctx.unit),
+    "base",
+  ),
+  baselineNumber("durVar", "Duration Variance", (a, b) => (b.origDurHrs ?? 0) - (a.origDurHrs ?? 0), () => "", "current"),
+  baselineNumber(
+    "blTotalFloat",
+    "BL Total Float",
+    (_a, b) => b.totalFloatHrs,
+    (_w, b, ctx) => formatDuration(b.totalFloatHrs, wbsCal(b), ctx.unit),
+    "base",
+  ),
+  {
+    key: "change",
+    label: "Change",
+    group: "Baseline",
+    kind: "text",
+    width: 160,
+    align: "left",
+    defaultVisible: false,
+    text: (a, ctx) => changeSummary(ctx.cmp?.changes.get(a)),
+    tip: (a, ctx) => changeDetails(a, ctx),
+    wbsText: () => "",
+    sortValue: (a, ctx) => changeSummary(ctx.cmp?.changes.get(a)),
+  },
+);
+
+/** Every change on the activity in words (the Change column's tooltip). */
+export function changeDetails(a: Activity, ctx: ColumnContext): string {
+  const ch = ctx.cmp?.changes.get(a);
+  return ch ? describeChange(a, ch, ctx.unit).join("\n") : "";
+}
+
+/** Columns added when a baseline is first loaded and none of the Baseline columns are showing. */
+export const BASELINE_DEFAULT_COLUMNS = ["blFinish", "finishVar", "change"];
 
 const DURATION_TYPES: Record<string, string> = {
   DT_FixedDUR2: "Fixed Duration and Units",

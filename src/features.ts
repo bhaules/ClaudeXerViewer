@@ -27,6 +27,14 @@ export const FEATURES = {
   embedSave: true,
   /** File > Export to Excel (Ctrl+E): the grid's columns and rows as an .xlsx. */
   excelExport: true,
+  /** File > Compare with Baseline: baseline columns and bars, the Changes tab and filter. */
+  baselineCompare: true,
+  /** Filter > Trace Logic: driving (or all) predecessors / successors of an activity. */
+  traceLogic: true,
+  /** Edit > Copy (Ctrl+C): rows as a table for email, Teams or Excel. */
+  copyRows: true,
+  /** View > Calendars: work weeks and holidays. */
+  calendars: true,
   /** WBS levels expanded when a file opens. */
   defaultExpandLevel: 2,
 } as const;

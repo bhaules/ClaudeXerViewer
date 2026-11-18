@@ -18,8 +18,13 @@ export interface GanttHost {
   selectedIndex(): number;
   dataDate(): number | null;
   onSelect(index: number): void;
-  onActivate(index: number): void;
+  /** Double-click on a row: the app zooms to its bar. */
+  onDoubleClick(index: number): void;
   onScroll(scrollTop: number): void;
+  /** Baseline [start, finish] for a row, or null; only called while showBaseline() is true. */
+  baseline(row: GridRow): [number | null, number | null] | null;
+  /** A baseline is loaded: bars move up and the baseline bar is drawn under them. */
+  showBaseline(): boolean;
   /** After every redraw (scroll, zoom, resize). */
   onDraw?(): void;
 }
@@ -80,7 +85,7 @@ export class Gantt {
     });
     this.scroller.addEventListener("dblclick", (e) => {
       const i = this.rowAt(e);
-      if (i >= 0) this.host.onActivate(i);
+      if (i >= 0) this.host.onDoubleClick(i);
     });
     this.scroller.addEventListener(
       "wheel",
@@ -115,6 +120,31 @@ export class Gantt {
     this.ppd = clamp(this.ppd * factor, MIN_PPD, MAX_PPD);
     this.update();
     this.scroller.scrollLeft = this.dateToX(anchorDate) - anchorX;
+  }
+
+  /**
+   * Zooms so the range fills about 60% of the chart and centres it (double-click a row).
+   * Short or zero-length ranges (milestones) get a two-week window.
+   */
+  focusRange(start: number, finish: number): void {
+    const w = this.scroller.clientWidth || 600;
+    const span = Math.max(finish - start, 14 * DAY);
+    const mid = (start + finish) / 2;
+    // Widen the chart's range if the bar sits outside it (e.g. a baseline bar).
+    this.start = Math.min(this.start, mid - span);
+    this.end = Math.max(this.end, mid + span);
+    this.ppd = clamp((w * 0.6) / (span / DAY), MIN_PPD, MAX_PPD);
+    this.update();
+    this.scroller.scrollLeft = Math.max(0, this.dateToX(mid) - w / 2);
+  }
+
+  /** Widens the date range (e.g. to take in a baseline) without changing the zoom. */
+  extendRange(start: number | null, end: number | null): void {
+    const left = this.xToDate(this.scroller.scrollLeft);
+    if (start !== null) this.start = Math.min(this.start, start - 30 * DAY);
+    if (end !== null) this.end = Math.max(this.end, end + 60 * DAY);
+    this.update();
+    this.scroller.scrollLeft = this.dateToX(left);
   }
 
   scrollToDate(ms: number): void {
@@ -294,6 +324,9 @@ export class Gantt {
     }
 
     const dd = this.host.dataDate();
+    const bl = this.host.showBaseline();
+    // With a baseline, bars move up a little and the baseline bar runs underneath.
+    const lift = bl ? -3 : 0;
     for (let i = first; i < last; i++) {
       const y = i * ROW_HEIGHT - top;
       ctx.strokeStyle = "#f1f1f1";
@@ -302,8 +335,9 @@ export class Gantt {
       ctx.lineTo(w, y + ROW_HEIGHT - 0.5);
       ctx.stroke();
       const row = rows[i];
-      if (row.kind === "wbs") this.drawSummary(ctx, row.wbs.start, row.wbs.finish, y, left);
-      else this.drawActivity(ctx, row.act, y, left, dd);
+      if (bl) this.drawBaseline(ctx, row, y, left);
+      if (row.kind === "wbs") this.drawSummary(ctx, row.wbs.start, row.wbs.finish, y + lift, left);
+      else this.drawActivity(ctx, row.act, y + lift, left, dd);
     }
 
     this.drawRelationships(ctx, w, h, left, top, dd);
@@ -330,7 +364,7 @@ export class Gantt {
   private drawRelationships(ctx: CanvasRenderingContext2D, w: number, h: number, left: number, top: number, dd: number | null): void {
     const sel = this.host.selectedIndex();
     const later: [Relationship, number[]][] = [];
-    const half = ROW_HEIGHT / 2;
+    const half = ROW_HEIGHT / 2 + (this.host.showBaseline() ? -3 : 0);
 
     for (const r of this.host.relationships()) {
       const i = this.host.rowOf(r.pred);
@@ -410,6 +444,35 @@ export class Gantt {
     ctx.lineTo(x - dir * s, y + s + 0.5);
     ctx.closePath();
     ctx.fill();
+  }
+
+  /** P6's baseline bar: a thin yellow bar under the current one (a small diamond for milestones). */
+  private drawBaseline(ctx: CanvasRenderingContext2D, row: GridRow, y: number, left: number): void {
+    const b = this.host.baseline(row);
+    if (!b) return;
+    const [s, f] = b;
+    const top = y + ROW_HEIGHT - 7;
+    ctx.fillStyle = GANTT.baseline;
+    ctx.strokeStyle = GANTT.baselineEdge;
+    const milestone = row.kind === "act" && isMilestone(row.act.type);
+    if (milestone || s === null || f === null || f <= s) {
+      const t = row.kind === "act" && row.act.type === "TT_Mile" ? s ?? f : f ?? s;
+      if (t === null) return;
+      const x = this.dateToX(t) - left;
+      ctx.beginPath();
+      ctx.moveTo(x, top - 1);
+      ctx.lineTo(x + 3.5, top + 2.5);
+      ctx.lineTo(x, top + 6);
+      ctx.lineTo(x - 3.5, top + 2.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      return;
+    }
+    const x0 = this.dateToX(s) - left;
+    const x1 = Math.max(x0 + 2, this.dateToX(f) - left);
+    ctx.fillRect(x0, top, x1 - x0, 4);
+    ctx.strokeRect(Math.round(x0) + 0.5, top + 0.5, Math.max(1, Math.round(x1 - x0) - 1), 3);
   }
 
   private drawSummary(ctx: CanvasRenderingContext2D, s: number | null, f: number | null, y: number, left: number): void {

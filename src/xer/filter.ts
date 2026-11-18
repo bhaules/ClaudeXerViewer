@@ -1,8 +1,10 @@
 // Activity filters: quick filters (status, critical, milestones, date window) plus a
 // per-column expression and an optional list of ticked values for each grid column.
 import type { Column, ColumnContext } from "./columns";
+import { changedBesidesProgress, type ChangeKind } from "./compare";
 import { isMilestone } from "./format";
 import type { Activity, Status } from "./model";
+import { traceLogic, type TraceSpec } from "./trace";
 
 export type Predicate = (a: Activity) => boolean;
 
@@ -20,6 +22,13 @@ export interface FilterState {
   values: Map<string, Set<string>>;
   /** Only activities with review comments. */
   commentedOnly: boolean;
+  /**
+   * Changes since the baseline (needs `ctx.cmp`): activities with any of these kinds;
+   * "any" means any change other than progress.
+   */
+  changes: Set<ChangeKind | "any">;
+  /** Trace Logic: only the activity and its traced predecessors / successors. */
+  trace: TraceSpec | null;
 }
 
 export function emptyFilter(): FilterState {
@@ -32,6 +41,8 @@ export function emptyFilter(): FilterState {
     columns: new Map(),
     values: new Map(),
     commentedOnly: false,
+    changes: new Set(),
+    trace: null,
   };
 }
 
@@ -44,7 +55,9 @@ export function filterActive(f: FilterState): boolean {
     f.from !== null ||
     f.to !== null ||
     [...f.columns.values()].some((v) => v.trim() !== "") ||
-    f.values.size > 0
+    f.values.size > 0 ||
+    f.changes.size > 0 ||
+    f.trace !== null
   );
 }
 
@@ -86,6 +99,20 @@ export function compileFilter(
     const t = columnTest(col, expr, ctx);
     if (t === "error") errors.add(key);
     else tests.push(t);
+  }
+  if (f.changes.size) {
+    const cmp = ctx.cmp;
+    tests.push((a) => {
+      const ch = cmp?.changes.get(a);
+      if (!ch) return false;
+      if (f.changes.has("any") && changedBesidesProgress(ch)) return true;
+      for (const k of ch.kinds) if (f.changes.has(k)) return true;
+      return false;
+    });
+  }
+  if (f.trace) {
+    const keep = traceLogic(f.trace);
+    tests.push((a) => keep.has(a));
   }
   for (const [key, keep] of f.values) {
     const col = columns.get(key);

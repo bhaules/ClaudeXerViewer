@@ -1,9 +1,11 @@
 // The Filter menu (also opened from the toolbar's funnel): status, critical, milestones,
 // comments, an "active between" date window with look-ahead presets from the data date,
-// the filter row under the headers, and Clear Filters.
+// changes since the baseline, Trace Logic, the filter row under the headers, and Clear Filters.
+import { CHANGE_KINDS, type ChangeKind } from "../xer/compare";
 import type { FilterState } from "../xer/filter";
 import { formatDate } from "../xer/format";
-import type { Status } from "../xer/model";
+import type { Activity, Status } from "../xer/model";
+import type { TraceDirection, TraceSpec } from "../xer/trace";
 import { el, formDialog } from "./dom";
 import type { MenuItem } from "./menu";
 
@@ -33,6 +35,36 @@ export interface FilterMenuHost {
   active(): boolean;
   filterRowShown(): boolean;
   toggleFilterRow(): void;
+  /** A baseline is loaded (File > Compare with Baseline). */
+  comparison(): boolean;
+  /** The selected activity, the starting point for Trace Logic. */
+  selected(): Activity | null;
+  setTrace(t: TraceSpec | null): void;
+}
+
+/** Trace Logic choices, shared with the grid row menu. */
+export const TRACE_OPTIONS: [string, TraceDirection, boolean][] = [
+  ["Driving Predecessors", "pred", true],
+  ["Driving Successors", "succ", true],
+  ["Driving Path (Both Ways)", "both", true],
+  ["All Predecessors", "pred", false],
+  ["All Successors", "succ", false],
+];
+
+/** The Trace Logic submenu for `root` (the selected activity, else the one being traced). */
+export function traceMenuItems(root: Activity | null, current: TraceSpec | null, set: (t: TraceSpec | null) => void): MenuItem[] {
+  const items: MenuItem[] = [];
+  TRACE_OPTIONS.forEach(([label, dir, drivingOnly], i) => {
+    if (i === 3) items.push("-");
+    items.push({
+      label: root ? `${label} of ${root.code}` : label,
+      enabled: () => root !== null,
+      checked: () => !!current && current.root === root && current.dir === dir && current.drivingOnly === drivingOnly,
+      action: () => root && set({ root, dir, drivingOnly }),
+    });
+  });
+  items.push("-", { label: "Clear Trace", enabled: () => current !== null, action: () => set(null) });
+  return items;
 }
 
 export function filterMenuItems(h: FilterMenuHost): MenuItem[] {
@@ -46,6 +78,8 @@ export function filterMenuItems(h: FilterMenuHost): MenuItem[] {
       h.onChange();
     },
   });
+  const changeToggle = (k: ChangeKind | "any", label: string): MenuItem =>
+    toggle(label, () => s().changes.has(k), (on) => (on ? s().changes.add(k) : s().changes.delete(k)));
   const range = () => {
     const { from, to } = s();
     return from === null && to === null ? "" : ` (${formatDate(from) || "..."} to ${formatDate(to) || "..."})`;
@@ -87,6 +121,21 @@ export function filterMenuItems(h: FilterMenuHost): MenuItem[] {
             h.onChange();
           },
         })),
+    },
+    "-",
+    {
+      label: "Changes vs Baseline",
+      enabled: () => h.loaded() && h.comparison(),
+      items: () => [
+        changeToggle("any", "Any Change (not progress)"),
+        "-",
+        ...CHANGE_KINDS.map(([k, label]) => changeToggle(k, label)),
+      ],
+    },
+    {
+      label: "Trace Logic",
+      enabled: () => h.loaded() && (h.selected() !== null || s().trace !== null),
+      items: () => traceMenuItems(h.selected() ?? s().trace?.root ?? null, s().trace, h.setTrace),
     },
     "-",
     { label: "Filter Row", key: "Ctrl+Shift+F", checked: h.filterRowShown, enabled: h.loaded, action: h.toggleFilterRow },

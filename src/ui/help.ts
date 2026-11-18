@@ -38,6 +38,7 @@ const SECTIONS: Section[] = [
         <li>The selected row is highlighted in <b>amber</b> in the grid and the Gantt, so it stands out from the blue WBS bands.</li>
         <li>Dates follow P6: <b>A</b> after a date means actual; <b>*</b> means a constraint applies.</li>
         <li><b>View &gt; Hide Empty WBS</b> hides bands with no activities under them.</li>
+        <li><b>View &gt; Calendars...</b> shows every calendar in the file: hours per day and week, the working times for each weekday, and a year view with holidays (red) and days with changed hours (blue). Hover a day for its hours. It opens on the selected activity's calendar.</li>
       </ul>`,
   },
   {
@@ -54,6 +55,7 @@ const SECTIONS: Section[] = [
             <li><b>Durations:</b> Original and Remaining Duration, Total and Free Float.</li>
             <li><b>Percent Complete:</b> Activity % Complete, Physical % Complete.</li>
             <li><b>Units:</b> Budgeted / Actual / Remaining Labor and Nonlabor Units (WBS bands show totals).</li>
+            <li><b>Baseline:</b> BL Start, BL Finish, Start and Finish Variance, BL Original Duration, Duration Variance, BL Total Float and Change. These fill in once a baseline is loaded (see Comparing with a baseline).</li>
             <li><b>User Defined Fields:</b> every activity UDF that has a value in the file.</li>
           </ul>
         </li>
@@ -81,6 +83,39 @@ const SECTIONS: Section[] = [
       </ul>`,
   },
   {
+    id: "trace",
+    title: "Trace Logic",
+    html: `
+      <p>Answers "why is this activity on this date?" by showing only the chain of activities that leads to it.</p>
+      <ul>
+        <li>Select an activity, then <b>Filter &gt; Trace Logic</b>, or right-click the activity and choose <b>Trace Logic</b>:
+          <ul>
+            <li><b>Driving Predecessors</b>: back through the relationships that drive each date, to the data date or a constraint. This is the activity's driving path.</li>
+            <li><b>Driving Successors</b>: forward through what this activity drives.</li>
+            <li><b>Driving Path (Both Ways)</b>: both of the above.</li>
+            <li><b>All Predecessors</b> / <b>All Successors</b>: every relationship, driving or not.</li>
+          </ul>
+        </li>
+        <li>The grid and Gantt show only the traced activities, with their WBS bands opened. The status bar says what is being traced. Turn on <b>View &gt; Relationship Lines</b> to see the chain on the Gantt.</li>
+        <li>It works with the other filters. <b>Filter &gt; Trace Logic &gt; Clear Trace</b> or <b>Clear Filters</b> goes back to everything.</li>
+      </ul>`,
+  },
+  {
+    id: "baseline",
+    title: "Comparing with a baseline",
+    html: `
+      <p>See what changed since an earlier version of the schedule, for example last month's update.</p>
+      <ul>
+        <li>Open the current schedule, then <b>File &gt; Compare with Baseline...</b> and pick the earlier <b>.xer</b> (or a saved viewer .html). Activities are matched by Activity ID, so it works across exports.</li>
+        <li>The grid gets <b>BL Finish</b>, <b>Finish Variance</b> and <b>Change</b> columns after Finish; more are in the Columns dialog under <b>Baseline</b>. Variance is baseline minus current in working time, like P6, so <b>-5d</b> means 5 working days later than the baseline. Hover a <b>Change</b> cell for the details.</li>
+        <li>The Gantt draws a thin ${swatch(GANTT.baseline)} yellow <b>baseline bar</b> under each bar.</li>
+        <li>The <b>Changes</b> tab at the bottom lists every changed activity with what changed: added, deleted, finish later or earlier, start moved, original duration, predecessors added, removed or with a new lag, constraints, progress, renamed, calendar and WBS. Pick a category under <b>Show</b> (with counts), click a column header to sort, and click a row to go to the activity. <b>Filter Activities</b> shows just those activities in the grid and Gantt.</li>
+        <li><b>Filter &gt; Changes vs Baseline</b> filters by the same categories. <b>Any Change</b> leaves out activities that were only progressed.</li>
+        <li><b>Deleted</b> activities aren't in the current schedule, so they're only listed on the Changes tab.</li>
+        <li><b>File &gt; Save Viewer with Schedule</b> saves the baseline inside the file too, so whoever you send it to sees the comparison. <b>File &gt; Remove Baseline</b> turns it off. Opening another .xer keeps the baseline and compares the new file with it.</li>
+      </ul>`,
+  },
+  {
     id: "gantt",
     title: "Gantt chart",
     html: `
@@ -94,6 +129,7 @@ const SECTIONS: Section[] = [
       </p>
       <ul>
         <li><b>Zoom:</b> Ctrl + mouse wheel over the chart, or <b>View &gt; Zoom</b> (In, Out, Zoom to Fit). <b>View &gt; Go to Data Date</b> scrolls to the data date.</li>
+        <li><b>Double-click a row in the Gantt</b> to zoom to its bar, like P6: the bar is centred and fills about half the chart (milestones get a two-week window). <b>View &gt; Zoom &gt; Zoom to Selected</b> and <b>Zoom to Bar</b> on the row's right-click menu do the same.</li>
         <li><b>Relationship lines</b> (<b>View &gt; Relationship Lines</b>): <b>Driving Only</b> (default) draws the relationships that drive each activity's dates; <b>All</b> adds the rest as dashed lines; <b>None</b> hides them. Lines are red when both ends are critical, and drawn thicker for the selected activity.</li>
         <li>Jumping to an activity (Find, a relationship, a comment) also scrolls the chart to its bar.</li>
         <li><b>View &gt; Gantt Chart</b> hides or shows it; drag the divider to change its width.</li>
@@ -106,7 +142,7 @@ const SECTIONS: Section[] = [
       <ul>
         <li>The <b>Relationships</b> tab at the bottom lists the selected activity's <b>Predecessors</b> and <b>Successors</b> with relationship type (FS/SS/FF/SF), lag, whether it is <b>Driving</b>, dates, float and criticality.</li>
         <li>Double-click a row to jump to that activity. Click a column header to sort.</li>
-        <li><b>View &gt; Show on Bottom</b> picks what the bottom panel shows (Relationships, Resource Usage or Comments), or <b>None</b> to hide it, like P6. You can also click its tabs; drag its top edge to resize it.</li>
+        <li><b>View &gt; Show on Bottom</b> picks what the bottom panel shows (Relationships, Resource Usage, Comments or Changes), or <b>None</b> to hide it, like P6. You can also click its tabs; drag its top edge to resize it.</li>
       </ul>`,
   },
   {
@@ -148,6 +184,7 @@ const SECTIONS: Section[] = [
       <ul>
         <li><b>File &gt; Save Viewer with Schedule</b> (Ctrl+S) saves one <b>.html</b> file with the schedule (and any comments) inside. Send it instead of a PDF: whoever receives it double-clicks it and the schedule opens, with nothing to install.</li>
         <li>The schedule is compressed, so the file is usually much smaller than the .xer.</li>
+        <li><b>Edit &gt; Copy</b> (Ctrl+C) copies the selected activity, or a selected WBS band with every row shown under it, as a table with the grid's columns. Paste it into an email, Teams, Word or Excel: WBS bands keep their colours. <b>Edit &gt; Copy All Rows as Shown</b> copies everything on screen, e.g. a filtered list or a traced driving path.</li>
         <li><b>File &gt; Export to Excel</b> saves the grid as an <b>.xlsx</b>: <b>Rows as Shown</b> (what's expanded now) or <b>All Rows</b> (every WBS expanded, Ctrl+E). It has the columns you're showing, in order, with the current sort and filters. Dates and numbers are real Excel values, WBS bands keep their colours and become Excel row groups, and the header row is frozen with AutoFilter on. A second sheet, <b>Export Info</b>, records the file, data date, sort and filters. Chrome and Edge ask where to save; other browsers put it in Downloads. The A (actual) and * (constraint) date markers aren't carried across.</li>
       </ul>`,
   },
@@ -192,6 +229,7 @@ export function showShortcuts(): void {
     ["Ctrl+O", "Open a .xer (or a saved viewer .html)"],
     ["Ctrl+S", "Save viewer with schedule (and comments)"],
     ["Ctrl+E", "Export all rows to Excel"],
+    ["Ctrl+C", "Copy the selected row (a WBS band: with the rows under it) as a table"],
     ["Ctrl+F", "Find activity by ID or name"],
     ["F3 / Shift+F3", "Find next / previous"],
     ["Ctrl+Shift+F", "Show / hide the filter row under the headers"],
@@ -201,6 +239,8 @@ export function showShortcuts(): void {
     ["Enter or double-click", "Expand / collapse WBS"],
     ["Double-click a relationship", "Go to that activity"],
     ["Ctrl+Mouse wheel on Gantt", "Zoom timescale"],
+    ["Double-click a row in the Gantt", "Zoom to that bar"],
+    ["Right-click an activity", "Comment, copy, Trace Logic, zoom to bar"],
     ["Right-click a column header", "Sort, filter or hide that column"],
     ["Funnel on a column header", "Filter or sort that column"],
     ["Esc", "Close a dialog, menu or the Find box; clear a filter box"],

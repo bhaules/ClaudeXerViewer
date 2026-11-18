@@ -12,43 +12,59 @@ export type MenuItem =
       items?: () => MenuItem[];
     };
 
-/** A one-level right-click menu at (x, y). Closes on click, Escape or clicking elsewhere. */
+/** A right-click menu at (x, y), with submenus. Closes on click, Escape or clicking elsewhere. */
 export function popupMenu(items: MenuItem[], x: number, y: number): void {
-  document.querySelector(".menu.popup")?.remove();
-  const menu = el("div", "menu popup");
+  document.querySelectorAll(".menu.popup").forEach((m) => m.remove());
+  const menus: HTMLElement[] = [];
   const close = () => {
-    menu.remove();
+    menus.splice(0).forEach((m) => m.remove());
     window.removeEventListener("mousedown", outside, true);
     window.removeEventListener("keydown", esc_, true);
     window.removeEventListener("blur", close);
   };
   const outside = (e: MouseEvent) => {
-    if (!menu.contains(e.target as Node)) close();
+    if (!menus.some((m) => m.contains(e.target as Node))) close();
   };
   const esc_ = (e: KeyboardEvent) => {
     if (e.key === "Escape") close();
   };
-  for (const item of items) {
-    if (item === "-") {
-      menu.append(el("div", "sep"));
-      continue;
+  const open = (list: MenuItem[], left: number, top: number, depth: number) => {
+    menus.splice(depth).forEach((m) => m.remove());
+    const menu = el("div", "menu popup");
+    for (const item of list) {
+      if (item === "-") {
+        menu.append(el("div", "sep"));
+        continue;
+      }
+      const enabled = item.enabled ? item.enabled() : true;
+      const row = el("div", `mi${enabled ? "" : " disabled"}`);
+      row.innerHTML =
+        `<span class="chk">${item.checked?.() ? "✓" : ""}</span><span>${esc(item.label)}</span>` +
+        `<span class="key">${esc(item.key ?? "")}</span><span class="sub">${item.items ? "▶" : ""}</span>`;
+      row.addEventListener("mouseenter", () => {
+        menu.querySelectorAll(".mi.open").forEach((n) => n.classList.remove("open"));
+        if (item.items && enabled) {
+          row.classList.add("open");
+          const rr = row.getBoundingClientRect();
+          open(item.items(), rr.right - 2, rr.top - 3, depth + 1);
+        } else {
+          menus.splice(depth + 1).forEach((m) => m.remove());
+        }
+      });
+      row.addEventListener("mouseup", () => {
+        if (!enabled || item.items) return;
+        close();
+        item.action?.();
+      });
+      menu.append(row);
     }
-    const enabled = item.enabled ? item.enabled() : true;
-    const row = el("div", `mi${enabled ? "" : " disabled"}`);
-    row.innerHTML =
-      `<span class="chk">${item.checked?.() ? "✓" : ""}</span><span>${esc(item.label)}</span>` +
-      `<span class="key">${esc(item.key ?? "")}</span><span class="sub"></span>`;
-    row.addEventListener("mouseup", () => {
-      if (!enabled) return;
-      close();
-      item.action?.();
-    });
-    menu.append(row);
-  }
-  document.body.append(menu);
-  const r = menu.getBoundingClientRect();
-  menu.style.left = `${Math.max(0, Math.min(x, window.innerWidth - r.width - 2))}px`;
-  menu.style.top = `${Math.max(0, Math.min(y, window.innerHeight - r.height - 2))}px`;
+    document.body.append(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(0, Math.min(left, window.innerWidth - r.width - 2))}px`;
+    menu.style.top = `${Math.max(0, Math.min(top, window.innerHeight - r.height - 2))}px`;
+    menus.push(menu);
+  };
+  open(items, x, y, 0);
   // Listen after this event finishes, so the right-click that opened it doesn't close it.
   setTimeout(() => {
     window.addEventListener("mousedown", outside, true);

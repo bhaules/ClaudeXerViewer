@@ -18,6 +18,8 @@ export const GANTT = {
   actual: "#1f4fd8",
   remaining: "#21a336",
   critical: "#e0201b",
+  baseline: "#ffd21f", // P6's default baseline bar is yellow
+  baselineEdge: "#9a7a00",
   summary: "#1d2b53",
   dataDate: "#1a56db",
   relationship: "#26323f",

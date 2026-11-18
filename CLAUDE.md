@@ -46,10 +46,17 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
   (F1), Keyboard Shortcuts, About)
 - `src/embed.ts`: "Save Viewer with Schedule" (gzip + base64 into a copy of the
   page captured at startup, before the app renders), plus the review comments as a
-  `<script id="xer-comments" type="application/json">` block
+  `<script id="xer-comments" type="application/json">` block and the baseline .xer (if
+  one is loaded) as `<script id="xer-baseline">`
 - `src/xer/xlsx.ts`: File > Export to Excel. Writes the .xlsx by hand (zip via
   `CompressionStream`, inline strings, styles); no library. `src/ui/column-filter.ts`:
   the header funnel popup (value list + condition + sort).
+- `src/xer/compare.ts`: File > Compare with Baseline (match by Activity ID, WBS by code
+  path below the project node; per-activity change kinds, variance, logic diff). The
+  comparison rides in `ColumnContext.cmp`, so Baseline columns, filters and Excel see it.
+  `src/ui/changes.ts`: the Changes tab. `src/xer/trace.ts`: Trace Logic (FilterState.trace).
+  `src/xer/clipboard.ts`: Edit > Copy (TSV + coloured HTML table). `src/ui/calendars.ts`:
+  View > Calendars.
 - `src/xer/comments.ts`: review comment model (targets, merge, save format; no DOM).
   `src/ui/comments.ts`: comment dialogs and the Comments tab
 - `src/features.ts`: feature flags; check them, don't delete features
@@ -208,7 +215,13 @@ under the mouse on mousedown, or double-click stops working.
   coloured bold rows with outline levels (max 7), WBS dates/numbers parsed back from
   their text. Uses `showSaveFilePicker` when available, else a download.
 - Jumping to an activity (Find, relationship double-click) also scrolls the Gantt
-  sideways to its bar.
+  sideways to its bar. Double-clicking a row in the Gantt zooms to its bar
+  (`Gantt.focusRange`), like P6; it does not expand/collapse WBS.
+- Baseline (File > Compare with Baseline): variance = baseline minus current in working
+  hours on the activity's calendar (P6 sign: negative = later). Baseline bars are thin
+  yellow bars under the current bars, which move up 3 px while a baseline is loaded.
+  "Any change" excludes progress-only changes. Opening another .xer keeps the baseline.
+- Right-click popups (`popupMenu`) support submenus, like the menu bar.
 
 ## Review comments
 - Never in the .xer and never imported into P6: they live in the saved HTML file.

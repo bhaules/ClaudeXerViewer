@@ -3,6 +3,35 @@
 All notable changes to XER Viewer. Each version is a GitHub release with the viewer
 attached as `xer-viewer-v<version>.html` (`xer-viewer.html` before 0.6.0).
 
+## 0.7.0 (2026-11-19)
+
+### Added
+- **Compare with a baseline.** **File > Compare with Baseline...** loads an earlier .xer
+  (for example last month's update) and compares the open schedule with it, matching
+  activities by Activity ID:
+  - **Baseline columns**: BL Start, BL Finish, Start and Finish Variance (working time,
+    P6 sign), BL Original Duration, Duration Variance, BL Total Float and Change.
+    BL Finish, Finish Variance and Change are added after Finish the first time.
+  - **Baseline bars**: a thin yellow bar under each Gantt bar.
+  - **Changes tab**: every added, deleted, moved, re-planned or re-linked activity, with
+    what changed. Pick a category, sort, click to go to the activity.
+  - **Filter > Changes vs Baseline**: filter by kind of change.
+  - Saved viewer files keep the baseline, so recipients see the comparison.
+- **Trace Logic.** **Filter > Trace Logic** (or right-click an activity) shows only its
+  driving predecessors, driving successors, both, or all predecessors / successors.
+- **Copy rows.** **Edit > Copy** (Ctrl+C) copies the selected activity, or a WBS band
+  with the rows under it, as a table for email, Teams, Word or Excel. **Copy All Rows
+  as Shown** copies the whole view.
+- **Zoom to a bar.** Double-click a row in the Gantt to zoom to its bar, like P6. Also
+  **View > Zoom > Zoom to Selected** and **Zoom to Bar** on the row's right-click menu.
+- **Calendars.** **View > Calendars...** shows each calendar's work week and a year view
+  of holidays and changed-hours days.
+
+### Changed
+- **Gantt double-click** zooms to the bar instead of expanding or collapsing a WBS band
+  (double-click in the grid still does that).
+- **Right-click menus** can have submenus.
+
 ## 0.6.2 (2026-11-13)
 
 ### Added
