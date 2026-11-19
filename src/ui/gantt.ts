@@ -25,6 +25,8 @@ export interface GanttHost {
   baseline(row: GridRow): [number | null, number | null] | null;
   /** A baseline is loaded: bars move up and the baseline bar is drawn under them. */
   showBaseline(): boolean;
+  /** Text drawn to the right of an activity's bar (View > Bar Labels), or "". */
+  barLabel(a: Activity): string;
   /** After every redraw (scroll, zoom, resize). */
   onDraw?(): void;
 }
@@ -341,6 +343,7 @@ export class Gantt {
     }
 
     this.drawRelationships(ctx, w, h, left, top, dd);
+    this.drawLabels(ctx, rows, first, last, w, left, top, lift);
 
     if (dd !== null) {
       const x = Math.round(this.dateToX(dd) - left) + 0.5;
@@ -444,6 +447,35 @@ export class Gantt {
     ctx.lineTo(x - dir * s, y + s + 0.5);
     ctx.closePath();
     ctx.fill();
+  }
+
+  /** View > Bar Labels: text just right of each activity's bar, over a light backing so lines don't hide it. */
+  private drawLabels(ctx: CanvasRenderingContext2D, rows: GridRow[], first: number, last: number, w: number, left: number, top: number, lift: number): void {
+    ctx.font = "11px 'Segoe UI', Tahoma, Arial, sans-serif";
+    ctx.textBaseline = "middle";
+    for (let i = first; i < last; i++) {
+      const row = rows[i];
+      if (row.kind !== "act") continue;
+      const a = row.act;
+      const text = this.host.barLabel(a);
+      if (!text) continue;
+      let end: number | null;
+      if (isMilestone(a.type)) {
+        const t = a.type === "TT_Mile" ? a.start : a.finish ?? a.start;
+        end = t === null ? null : this.dateToX(t) + 7;
+      } else {
+        end = a.finish === null ? null : this.dateToX(a.finish);
+      }
+      if (end === null) continue;
+      const x = Math.max(end - left, this.dateToX(a.start ?? a.finish ?? 0) - left) + 4;
+      if (x > w) continue;
+      const y = i * ROW_HEIGHT - top + ROW_HEIGHT / 2 + lift;
+      const tw = ctx.measureText(text).width;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+      ctx.fillRect(x - 1, y - 7, tw + 2, 14);
+      ctx.fillStyle = GANTT.label;
+      ctx.fillText(text, x, y + 0.5);
+    }
   }
 
   /** P6's baseline bar: a thin yellow bar under the current one (a small diamond for milestones). */

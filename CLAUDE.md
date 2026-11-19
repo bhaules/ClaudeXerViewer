@@ -57,6 +57,12 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
   `src/ui/changes.ts`: the Changes tab. `src/xer/trace.ts`: Trace Logic (FilterState.trace).
   `src/xer/clipboard.ts`: Edit > Copy (TSV + coloured HTML table). `src/ui/calendars.ts`:
   View > Calendars.
+- `src/xer/health.ts`: Review > Schedule Check (DCMA-style; FilterState.check); `src/ui/health.ts`
+  its tab. `src/xer/reports.ts`: Excel sheets for the Changes and Schedule Check tabs via
+  `buildTableXlsx` (xlsx.ts: any plain tables; `pack` assembles any number of sheets).
+  `src/xer/text.ts`: notebook / step HTML -> plain text (never render file HTML).
+  `src/ui/details.ts`: Activity Details tab (General, Relationships, Resources, Codes, UDFs,
+  Notebook, Steps; General reuses column `text`). `src/ui/spreadsheet.ts`: Resource Spreadsheet.
 - `src/xer/comments.ts`: review comment model (targets, merge, save format; no DOM).
   `src/ui/comments.ts`: comment dialogs and the Comments tab
 - `src/features.ts`: feature flags; check them, don't delete features
@@ -171,7 +177,10 @@ under the mouse on mousedown, or double-click stops working.
 - Gantt relationship lines (View > Relationship Lines: None / Driving Only (default) / All):
   driving solid, non-driving dashed, red when both ends are critical; lines touching
   the selected activity drawn thicker. Only rows expanded into view get lines.
-- Predecessor/Successor panels have a Driving column.
+- Predecessor/Successor panels have a Driving column. They sit on the Relationships tab of
+  Activity Details (bottom tab id "details"; old prefs with "relationships" are mapped).
+- Notebook (TASKMEMO + MEMOTYPE topics) and Steps (TASKPROC) are parsed into
+  `Activity.notes` / `Activity.steps`; HTML becomes plain text (`htmlToText`), 0x7F = newline.
 - Bottom panel tabs: Relationships | Resource Usage (`src/ui/resources.ts`). The
   resource list is kept exactly as wide as the grid and the histogram uses the Gantt's
   timescale (`Gantt.timeline()`, redrawn from `onDraw`), so bars line up under the

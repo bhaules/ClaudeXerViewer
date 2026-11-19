@@ -35,6 +35,14 @@ export const FEATURES = {
   copyRows: true,
   /** View > Calendars: work weeks and holidays. */
   calendars: true,
+  /** Activity Details tab: General, Relationships, Resources, Codes, UDFs, Notebook, Steps. */
+  activityDetails: true,
+  /** Resource Spreadsheet tab: usage per week / month / quarter / year, to Excel. */
+  resourceSpreadsheet: true,
+  /** Review > Schedule Check: DCMA 14-point style checks. */
+  scheduleCheck: true,
+  /** View > Bar Labels on the Gantt. */
+  barLabels: true,
   /** WBS levels expanded when a file opens. */
   defaultExpandLevel: 2,
 } as const;

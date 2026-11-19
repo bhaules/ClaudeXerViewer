@@ -29,6 +29,8 @@ export interface FilterState {
   changes: Set<ChangeKind | "any">;
   /** Trace Logic: only the activity and its traced predecessors / successors. */
   trace: TraceSpec | null;
+  /** Review > Schedule Check: only the activities a check flagged. */
+  check: { name: string; ids: Set<Activity> } | null;
 }
 
 export function emptyFilter(): FilterState {
@@ -43,6 +45,7 @@ export function emptyFilter(): FilterState {
     commentedOnly: false,
     changes: new Set(),
     trace: null,
+    check: null,
   };
 }
 
@@ -57,7 +60,8 @@ export function filterActive(f: FilterState): boolean {
     [...f.columns.values()].some((v) => v.trim() !== "") ||
     f.values.size > 0 ||
     f.changes.size > 0 ||
-    f.trace !== null
+    f.trace !== null ||
+    f.check !== null
   );
 }
 
@@ -113,6 +117,10 @@ export function compileFilter(
   if (f.trace) {
     const keep = traceLogic(f.trace);
     tests.push((a) => keep.has(a));
+  }
+  if (f.check) {
+    const ids = f.check.ids;
+    tests.push((a) => ids.has(a));
   }
   for (const [key, keep] of f.values) {
     const col = columns.get(key);

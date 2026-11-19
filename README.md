@@ -49,7 +49,8 @@ in the same browser.
    or earlier, start moved, original duration, predecessors added or removed or with a
    new lag, constraints, progress, renames, calendar and WBS moves. Pick a category,
    sort, click a row to go to the activity, or **Filter Activities** to show just those.
-   **Filter > Changes vs Baseline** does the same from the menu.
+   **Filter > Changes vs Baseline** does the same from the menu. **Export to Excel** saves
+   every change (deleted activities included) and a summary of counts for monthly reports.
 4. **File > Save Viewer with Schedule** keeps the baseline inside the saved file, so
    recipients see the comparison too.
 
@@ -97,13 +98,21 @@ in the same browser.
   activities..." to keep all activities in view. Click the list's headers to sort it,
   and type in the boxes under them to filter it (e.g. `>20000` in Budgeted Units);
   **All Resources** then means the resources still listed.
+  The **Resource Spreadsheet** tab shows the same as a table (per week, month, quarter
+  or year; total, actual or remaining; optionally manning) and exports it to Excel.
   **Bars by** sets the bar period (Week by default) independently of the Gantt zoom:
   press **Fit project** to squeeze the whole project into view and keep weekly bars.
   Tick **Manning** and enter the hours one person works per week (e.g. 70 for
   7 x 10 h days) to show people instead of hours; monthly bars then show the
   average crew for the month.
-- **Relationships**: select an activity to see its predecessors and successors
-  (type and lag) below. Double-click one to jump to it.
+- **Activity Details** (bottom tab): for the selected activity, like P6: **General**
+  (dates, durations, float, constraints, units, baseline), **Relationships**
+  (predecessors and successors with type, lag and driving; double-click one to jump
+  to it), **Resources**, **Codes**, **UDFs**, **Notebook** notes and **Steps**.
+- **Schedule Check** (**Review > Schedule Check**): a DCMA 14-point style health check
+  (missing logic, leads, lags, relationship types, hard constraints, high and negative
+  float, high duration, invalid dates, resources, missed activities, CPLI, BEI) with
+  pass / fail. Click a check to show the activities it flags; export to Excel.
 - **Trace Logic** (**Filter > Trace Logic**, or right-click an activity): show only
   the activity's driving predecessors (its driving path), driving successors, both,
   or all predecessors / successors. The WBS bands they sit in are opened. **Clear
@@ -112,14 +121,14 @@ in the same browser.
   row shown under it, as a table with the grid's columns, for pasting into an email,
   Teams, Word or Excel (WBS colours kept). **Edit > Copy All Rows as Shown** copies the
   whole filtered view, e.g. a traced driving path.
-- **Calendars** (**View > Calendars...**): each calendar's work week and a year view
-  of its holidays and changed-hours days.
+- **Calendars** (**View > Calendars...**): each calendar's work week and the whole
+  year on one screen, with its holidays and changed-hours days.
 - **Find**: Ctrl+F, then Enter / F3 for next and Shift+Enter / Shift+F3 for previous.
-- **Bottom panel**: **View > Show on Bottom** picks Relationships, Resource Usage,
-  Comments, Changes or None, like P6.
+- **Bottom panel**: **View > Show on Bottom** picks Activity Details, Resource Usage,
+  Resource Spreadsheet, Comments, Changes, Schedule Check or None, like P6.
 - **Gantt**: Ctrl+mouse wheel to zoom, **View > Zoom** and **View > Go to Data Date**.
   Double-click a row in the Gantt to zoom to its bar, like P6 (also **View > Zoom >
-  Zoom to Selected**).
+  Zoom to Selected**). **View > Bar Labels** writes the name, ID or dates next to bars.
   Driving relationships are drawn as arrows (red on the critical path). Choose
   **View > Relationship Lines > None / Driving Only / All**. The selected
   activity's lines are drawn thicker.

@@ -82,22 +82,113 @@ export async function buildActivitiesXlsx(o: ExportOptions): Promise<Uint8Array>
     .join("");
   const infoSheet = `${XML}<worksheet xmlns="${NS_MAIN}"><cols><col min="1" max="1" width="22" customWidth="1"/><col min="2" max="2" width="90" customWidth="1"/></cols><sheetData>${infoRows}</sheetData></worksheet>`;
 
-  const name = escapeXml(o.sheetName.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Activities");
-  const quoted = `'${name.replace(/'/g, "''")}'`;
+  return pack(
+    [
+      { name: o.sheetName || "Activities", xml: sheet, filter: `$A$1:$${lastCol}$${o.rows.length + 1}` },
+      { name: "Export Info", xml: infoSheet },
+    ],
+    styles,
+  );
+}
+
+// ---------- Plain tables (Changes tab, Resource Spreadsheet) ----------
+
+/** A cell: text, a number, a date (ms, UTC wall clock) or empty. */
+export type SheetCell = string | number | { date: number } | null;
+
+export interface TableSheet {
+  name: string;
+  columns: { label: string; /** Excel width in characters. */ width: number; align?: "left" | "right" }[];
+  rows: { cells: SheetCell[]; bold?: boolean; fill?: string; color?: string }[];
+  /** Columns kept in view when scrolling sideways. */
+  frozenCols?: number;
+}
+
+/** A workbook of plain tables: header row frozen with an AutoFilter, numbers and dates as values. */
+export async function buildTableXlsx(sheets: TableSheet[]): Promise<Uint8Array> {
+  const styles = new StyleTable();
+  const head = styles.get({ kind: "t", bold: true, fill: "#d9d9d9", color: "#000000", indent: 0, align: "wrap" });
+  const parts = sheets.map((t) => {
+    const header = `<row r="1" ht="30" customHeight="1">${t.columns.map((c, i) => textCell(colName(i) + 1, head, c.label)).join("")}</row>`;
+    const body = t.rows.map((row, ri) => {
+      const r = ri + 2;
+      const cells = row.cells
+        .map((v, ci) => {
+          const ref = colName(ci) + r;
+          const kind: CellKind = v === null || typeof v === "string" ? "t" : typeof v === "number" ? "n" : "d";
+          const align = t.columns[ci]?.align ?? (kind === "t" ? "left" : "right");
+          const style = styles.get({ kind, bold: !!row.bold, fill: row.fill ?? null, color: row.color ?? null, indent: 0, align });
+          if (v === null || v === "") return row.fill ? `<c r="${ref}" s="${style}"/>` : "";
+          if (typeof v === "string") return textCell(ref, style, v);
+          const n = typeof v === "number" ? Math.round(v * 100) / 100 : v.date / DAY + EXCEL_EPOCH;
+          return `<c r="${ref}" s="${style}"><v>${n}</v></c>`;
+        })
+        .join("");
+      return `<row r="${r}">${cells}</row>`;
+    });
+    const lastCol = colName(Math.max(0, t.columns.length - 1));
+    const range = `A1:${lastCol}${t.rows.length + 1}`;
+    const frozen = Math.min(t.frozenCols ?? 0, t.columns.length);
+    const pane = frozen
+      ? `<pane xSplit="${frozen}" ySplit="1" topLeftCell="${colName(frozen)}2" activePane="bottomRight" state="frozen"/>`
+      : `<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>`;
+    const colsXml = t.columns.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.width}" customWidth="1"/>`).join("");
+    const xml =
+      `${XML}<worksheet xmlns="${NS_MAIN}" xmlns:r="${NS_REL}"><dimension ref="${range}"/>` +
+      `<sheetViews><sheetView workbookViewId="0">${pane}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>` +
+      `<cols>${colsXml}</cols><sheetData>${header}${body.join("")}</sheetData><autoFilter ref="${range}"/>` +
+      `<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>`;
+    return { name: t.name, xml, filter: `$A$1:$${lastCol}$${t.rows.length + 1}` };
+  });
+  return pack(parts, styles);
+}
+
+/** Excel sheet names: at most 31 characters, none of \ / ? * [ ] :, and unique. */
+function sheetNames(names: string[]): string[] {
+  const used = new Set<string>();
+  return names.map((n) => {
+    const base = n.replace(/[\\/?*[\]:]/g, " ").trim().slice(0, 31) || "Sheet";
+    let name = base;
+    for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base.slice(0, 27)} (${i})`;
+    used.add(name.toLowerCase());
+    return name;
+  });
+}
+
+/** Zips worksheets into a workbook. `filter` (e.g. "$A$1:$E$20") turns on that sheet's AutoFilter and print titles. */
+function pack(sheets: { name: string; xml: string; filter?: string }[], styles: StyleTable): Promise<Uint8Array> {
+  const names = sheetNames(sheets.map((x) => x.name)).map(escapeXml);
+  const defined = sheets
+    .map((x, i) => {
+      if (!x.filter) return "";
+      const quoted = `'${names[i].replace(/'/g, "''")}'`;
+      return (
+        `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">${quoted}!${x.filter}</definedName>` +
+        `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">${quoted}!$1:$1</definedName>`
+      );
+    })
+    .join("");
   const workbook =
     `${XML}<workbook xmlns="${NS_MAIN}" xmlns:r="${NS_REL}"><bookViews><workbookView/></bookViews><sheets>` +
-    `<sheet name="${name}" sheetId="1" r:id="rId1"/><sheet name="Export Info" sheetId="2" r:id="rId2"/></sheets><definedNames>` +
-    `<definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">${quoted}!$A$1:$${lastCol}$${o.rows.length + 1}</definedName>` +
-    `<definedName name="_xlnm.Print_Titles" localSheetId="0">${quoted}!$1:$1</definedName></definedNames></workbook>`;
-
+    names.map((n, i) => `<sheet name="${n}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("") +
+    `</sheets>${defined ? `<definedNames>${defined}</definedNames>` : ""}</workbook>`;
+  const contentTypes =
+    `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>` +
+    `<Override PartName="/xl/workbook.xml" ContentType="${CT}.sheet.main+xml"/>` +
+    sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="${CT}.worksheet+xml"/>`).join("") +
+    `<Override PartName="/xl/styles.xml" ContentType="${CT}.styles+xml"/></Types>`;
+  const rels =
+    `${XML}<Relationships xmlns="${NS_PKG_REL}">` +
+    sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${NS_REL}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("") +
+    `<Relationship Id="rId${sheets.length + 1}" Type="${NS_REL}/styles" Target="styles.xml"/></Relationships>`;
   return zip([
-    ["[Content_Types].xml", CONTENT_TYPES],
+    ["[Content_Types].xml", contentTypes],
     ["_rels/.rels", ROOT_RELS],
     ["xl/workbook.xml", workbook],
-    ["xl/_rels/workbook.xml.rels", WORKBOOK_RELS],
+    ["xl/_rels/workbook.xml.rels", rels],
     ["xl/styles.xml", styles.xml()],
-    ["xl/worksheets/sheet1.xml", sheet],
-    ["xl/worksheets/sheet2.xml", infoSheet],
+    ...sheets.map((x, i): [string, string] => [`xl/worksheets/sheet${i + 1}.xml`, x.xml]),
   ]);
 }
 
@@ -211,19 +302,7 @@ const NS_MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const NS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const NS_PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships";
 const CT = "application/vnd.openxmlformats-officedocument.spreadsheetml";
-const CONTENT_TYPES =
-  `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
-  `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>` +
-  `<Override PartName="/xl/workbook.xml" ContentType="${CT}.sheet.main+xml"/>` +
-  `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="${CT}.worksheet+xml"/>` +
-  `<Override PartName="/xl/worksheets/sheet2.xml" ContentType="${CT}.worksheet+xml"/>` +
-  `<Override PartName="/xl/styles.xml" ContentType="${CT}.styles+xml"/></Types>`;
 const ROOT_RELS = `${XML}<Relationships xmlns="${NS_PKG_REL}"><Relationship Id="rId1" Type="${NS_REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
-const WORKBOOK_RELS =
-  `${XML}<Relationships xmlns="${NS_PKG_REL}">` +
-  `<Relationship Id="rId1" Type="${NS_REL}/worksheet" Target="worksheets/sheet1.xml"/>` +
-  `<Relationship Id="rId2" Type="${NS_REL}/worksheet" Target="worksheets/sheet2.xml"/>` +
-  `<Relationship Id="rId3" Type="${NS_REL}/styles" Target="styles.xml"/></Relationships>`;
 
 export const XLSX_TYPE = `${CT}.sheet`;
 

@@ -1,6 +1,7 @@
 // Tables -> Schedule: the linked object model the UI works with.
 import { defaultPattern, hasWorkBetween, parseCalendarData, type DayRanges, type WorkPattern } from "./calendar";
 import type { Row, XerTables } from "./parse";
+import { htmlToText } from "./text";
 
 export type RelType = "FS" | "SS" | "FF" | "SF";
 export type Status = "NotStarted" | "InProgress" | "Completed";
@@ -157,7 +158,26 @@ export interface Activity {
   codes: Map<string, ActivityCodeValue>;
   preds: Relationship[];
   succs: Relationship[];
+  /** Notebook topics, in topic order. */
+  notes: Note[];
+  /** Steps, in P6 order. */
+  steps: Step[];
   raw: Row;
+}
+
+/** A Notebook topic on an activity (TASKMEMO), as plain text. */
+export interface Note {
+  topic: string;
+  text: string;
+}
+
+/** An activity step (TASKPROC). */
+export interface Step {
+  name: string;
+  weight: number;
+  pctComplete: number;
+  completed: boolean;
+  description: string;
 }
 
 export interface Relationship {
@@ -449,6 +469,8 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
       codes: new Map(),
       preds: [],
       succs: [],
+      notes: [],
+      steps: [],
       raw: r,
     };
     a.critical = isCritical(a, projectInfo.get(r.proj_id));
@@ -484,6 +506,8 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
 
   const resources = readAssignments(get("RSRC"), get("TASKRSRC"), activityById);
   const codeTypes = readActivityCodes(get("ACTVTYPE"), get("ACTVCODE"), get("TASKACTV"), activityById);
+  readNotebook(get("MEMOTYPE"), get("TASKMEMO"), activityById);
+  readSteps(get("TASKPROC"), activityById);
 
   return { header, projects, roots, activities, activityById, relationships, calendars, udfTypes, resources, codeTypes };
 }
@@ -582,6 +606,45 @@ function readActivityCodes(typeRows: Row[], codeRows: Row[], assignRows: Row[], 
     if (n > 1) t.label = `${t.label} (${n})`;
   }
   return result;
+}
+
+/** TASKMEMO notes by topic (MEMOTYPE), as plain text, in the topics' order. */
+function readNotebook(typeRows: Row[], memoRows: Row[], activities: Map<string, Activity>): void {
+  const topics = new Map(typeRows.map((r) => [r.memo_type_id, { name: r.memo_type || "Notes", seq: num(r.seq_num) ?? 0 }]));
+  const touched = new Set<Activity>();
+  const order = new Map<Note, number>();
+  for (const r of memoRows) {
+    const a = activities.get(r.task_id);
+    const text = htmlToText(r.task_memo);
+    if (!a || !text) continue;
+    const topic = topics.get(r.memo_type_id);
+    const note = { topic: topic?.name ?? "Notes", text };
+    order.set(note, topic?.seq ?? Number.MAX_SAFE_INTEGER);
+    a.notes.push(note);
+    touched.add(a);
+  }
+  for (const a of touched) a.notes.sort((x, y) => order.get(x)! - order.get(y)! || x.topic.localeCompare(y.topic));
+}
+
+function readSteps(rows: Row[], activities: Map<string, Activity>): void {
+  const seq = new Map<Step, number>();
+  const touched = new Set<Activity>();
+  for (const r of rows) {
+    const a = activities.get(r.task_id);
+    if (!a) continue;
+    const completed = r.complete_flag === "Y";
+    const step: Step = {
+      name: r.proc_name ?? "",
+      weight: num(r.proc_wt) ?? 0,
+      pctComplete: num(r.complete_pct) ?? (completed ? 100 : 0),
+      completed,
+      description: htmlToText(r.proc_descr),
+    };
+    seq.set(step, num(r.seq_num) ?? 0);
+    a.steps.push(step);
+    touched.add(a);
+  }
+  for (const a of touched) a.steps.sort((x, y) => seq.get(x)! - seq.get(y)!);
 }
 
 const RESOURCE_TYPES: Record<string, string> ={ RT_Labor: "Labor", RT_Equip: "Nonlabor", RT_Mat: "Material" };

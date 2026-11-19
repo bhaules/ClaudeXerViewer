@@ -37,7 +37,7 @@ export function showCalendars(s: Schedule, initial: Calendar | null, year: numbe
 
   const renderList = () => {
     list.innerHTML =
-      `<table><thead><tr><th>Calendar</th><th>Hours/Day</th><th>Activities</th></tr></thead><tbody>` +
+      `<table><thead><tr><th>Calendar</th><th title="Hours per day">Hrs/Day</th><th title="Activities using it">Acts</th></tr></thead><tbody>` +
       cals
         .map(
           (c, i) =>
@@ -53,9 +53,11 @@ export function showCalendars(s: Schedule, initial: Calendar | null, year: numbe
     const weekHrs = w.week.reduce((n, r) => n + hours(r), 0);
     // Monday first, like P6.
     const order = [1, 2, 3, 4, 5, 6, 0];
-    const week = order
-      .map((d) => `<tr><td>${DAY_NAMES[d]}</td><td class="r">${trim(hours(w.week[d]))}</td><td>${times(w.week[d]) || "Non-work"}</td></tr>`)
-      .join("");
+    // Days across, so the whole year still fits below without scrolling.
+    const week =
+      `<tr><th></th>${order.map((d) => `<th>${DAY_NAMES[d]}</th>`).join("")}</tr>` +
+      `<tr><th>Hours</th>${order.map((d) => `<td>${trim(hours(w.week[d]))}</td>`).join("")}</tr>` +
+      `<tr><th>Working times</th>${order.map((d) => `<td>${times(w.week[d]).replace(/, /g, "<br>") || "Non-work"}</td>`).join("")}</tr>`;
 
     const inYear = [...w.exceptions.keys()].filter((d) => new Date(d * DAY).getUTCFullYear() === shownYear).length;
     const months = MONTHS.map((name, m) => monthHtml(current, shownYear, m, name)).join("");
@@ -63,7 +65,7 @@ export function showCalendars(s: Schedule, initial: Calendar | null, year: numbe
       `<h3>${esc(current.name)}</h3>` +
       `<p class="cal-facts">${trim(current.dayHrs)} h/day · ${trim(current.weekHrs)} h/week · ${trim(current.monthHrs)} h/month` +
       ` · work week ${trim(weekHrs)} h · ${w.exceptions.size.toLocaleString()} exceptions</p>` +
-      `<table class="cal-week"><thead><tr><th>Day</th><th>Hours</th><th>Working times</th></tr></thead><tbody>${week}</tbody></table>` +
+      `<table class="cal-week"><tbody>${week}</tbody></table>` +
       `<div class="cal-yearbar"><button class="btn" data-y="-1" title="Previous year">◀</button><b>${shownYear}</b>` +
       `<button class="btn" data-y="1" title="Next year">▶</button><span>${inYear} exception${inYear === 1 ? "" : "s"} this year</span>` +
       `<span class="cal-key"><i class="k-work"></i>Work <i class="k-off"></i>Non-work <i class="k-hol"></i>Holiday / non-work exception <i class="k-exc"></i>Changed hours</span></div>` +

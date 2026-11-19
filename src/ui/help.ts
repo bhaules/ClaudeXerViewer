@@ -38,7 +38,7 @@ const SECTIONS: Section[] = [
         <li>The selected row is highlighted in <b>amber</b> in the grid and the Gantt, so it stands out from the blue WBS bands.</li>
         <li>Dates follow P6: <b>A</b> after a date means actual; <b>*</b> means a constraint applies.</li>
         <li><b>View &gt; Hide Empty WBS</b> hides bands with no activities under them.</li>
-        <li><b>View &gt; Calendars...</b> shows every calendar in the file: hours per day and week, the working times for each weekday, and a year view with holidays (red) and days with changed hours (blue). Hover a day for its hours. It opens on the selected activity's calendar.</li>
+        <li><b>View &gt; Calendars...</b> shows every calendar in the file: hours per day and week, the working times for each weekday, and the whole year on one screen with holidays (red) and days with changed hours (blue). Hover a day for its hours; ◀ ▶ change the year. It opens on the selected activity's calendar.</li>
       </ul>`,
   },
   {
@@ -111,6 +111,7 @@ const SECTIONS: Section[] = [
         <li>The Gantt draws a thin ${swatch(GANTT.baseline)} yellow <b>baseline bar</b> under each bar.</li>
         <li>The <b>Changes</b> tab at the bottom lists every changed activity with what changed: added, deleted, finish later or earlier, start moved, original duration, predecessors added, removed or with a new lag, constraints, progress, renamed, calendar and WBS. Pick a category under <b>Show</b> (with counts), click a column header to sort, and click a row to go to the activity. <b>Filter Activities</b> shows just those activities in the grid and Gantt.</li>
         <li><b>Filter &gt; Changes vs Baseline</b> filters by the same categories. <b>Any Change</b> leaves out activities that were only progressed.</li>
+        <li><b>Export to Excel</b> on the Changes tab saves every change (including deleted activities, biggest slips first) with baseline and current dates, variances and details, plus a <b>Summary</b> sheet of counts, for monthly reports.</li>
         <li><b>Deleted</b> activities aren't in the current schedule, so they're only listed on the Changes tab.</li>
         <li><b>File &gt; Save Viewer with Schedule</b> saves the baseline inside the file too, so whoever you send it to sees the comparison. <b>File &gt; Remove Baseline</b> turns it off. Opening another .xer keeps the baseline and compares the new file with it.</li>
       </ul>`,
@@ -129,6 +130,7 @@ const SECTIONS: Section[] = [
       </p>
       <ul>
         <li><b>Zoom:</b> Ctrl + mouse wheel over the chart, or <b>View &gt; Zoom</b> (In, Out, Zoom to Fit). <b>View &gt; Go to Data Date</b> scrolls to the data date.</li>
+        <li><b>View &gt; Bar Labels</b> writes the Activity Name, Activity ID, both, the Finish date, or the Start and Finish dates next to each bar, as on a printout.</li>
         <li><b>Double-click a row in the Gantt</b> to zoom to its bar, like P6: the bar is centred and fills about half the chart (milestones get a two-week window). <b>View &gt; Zoom &gt; Zoom to Selected</b> and <b>Zoom to Bar</b> on the row's right-click menu do the same.</li>
         <li><b>Relationship lines</b> (<b>View &gt; Relationship Lines</b>): <b>Driving Only</b> (default) draws the relationships that drive each activity's dates; <b>All</b> adds the rest as dashed lines; <b>None</b> hides them. Lines are red when both ends are critical, and drawn thicker for the selected activity.</li>
         <li>Jumping to an activity (Find, a relationship, a comment) also scrolls the chart to its bar.</li>
@@ -137,12 +139,17 @@ const SECTIONS: Section[] = [
   },
   {
     id: "relationships",
-    title: "Relationships",
+    title: "Activity Details",
     html: `
+      <p>The <b>Activity Details</b> tab at the bottom shows the selected activity, like P6's, on these tabs:</p>
       <ul>
-        <li>The <b>Relationships</b> tab at the bottom lists the selected activity's <b>Predecessors</b> and <b>Successors</b> with relationship type (FS/SS/FF/SF), lag, whether it is <b>Driving</b>, dates, float and criticality.</li>
-        <li>Double-click a row to jump to that activity. Click a column header to sort.</li>
-        <li><b>View &gt; Show on Bottom</b> picks what the bottom panel shows (Relationships, Resource Usage, Comments or Changes), or <b>None</b> to hide it, like P6. You can also click its tabs; drag its top edge to resize it.</li>
+        <li><b>General:</b> IDs, type, status, WBS, calendar, durations, float, all its dates, constraints and units, and (with a baseline loaded) its baseline dates, variance and what changed. Select a WBS band to see its summary.</li>
+        <li><b>Relationships:</b> its <b>Predecessors</b> and <b>Successors</b> with relationship type (FS/SS/FF/SF), lag, whether it is <b>Driving</b>, dates, float and criticality. Double-click a row to jump to that activity; click a column header to sort.</li>
+        <li><b>Resources:</b> the resources assigned, with budgeted, actual, remaining and at-completion units and their dates.</li>
+        <li><b>Codes:</b> every activity code assigned, with its description. <b>UDFs:</b> every user defined field with a value.</li>
+        <li><b>Notebook:</b> its notebook notes by topic, as plain text. <b>Steps:</b> its steps with weight, % complete and description, and the weighted total.</li>
+        <li>The numbers in brackets on the tabs show how many there are. The tab you pick is remembered.</li>
+        <li><b>View &gt; Show on Bottom</b> picks what the bottom panel shows (Activity Details, Resource Usage, Resource Spreadsheet, Comments, Changes or Schedule Check), or <b>None</b> to hide it, like P6. You can also click its tabs; drag its top edge to resize it.</li>
       </ul>`,
   },
   {
@@ -157,6 +164,20 @@ const SECTIONS: Section[] = [
         <li><b>Bars by</b> sets each bar's period (Week by default) separately from the Gantt zoom. <b>Fit project</b> squeezes the whole project into view and keeps weekly bars.</li>
         <li><b>Manning</b> shows people instead of hours: hours ÷ the hours one person works per week (e.g. 70 for 7 × 10 h days). Longer bars are scaled, so a monthly bar shows the average crew for that month.</li>
         <li>Hours are spread evenly over each assignment's working time on the activity's calendar (no resource curves).</li>
+        <li>The <b>Resource Spreadsheet</b> tab shows the same numbers as a table: one row per resource, one column per week, month, quarter or year (<b>Units per</b>), with a Total column and a <b>Total labor</b> row. Show <b>Total</b>, <b>Actual</b> or <b>Remaining</b> units, or tick <b>Manning</b> for people (labour only; the hours per person-week come from the Resource Usage tab, and Total becomes the peak). The column with the data date is highlighted. <b>Export to Excel</b> saves it as an .xlsx.</li>
+      </ul>`,
+  },
+  {
+    id: "check",
+    title: "Schedule Check",
+    html: `
+      <p><b>Review &gt; Schedule Check</b> (or the <b>Schedule Check</b> tab at the bottom) runs a health check like the DCMA 14-point assessment, on incomplete activities, leaving out Level of Effort and WBS summary activities:</p>
+      <ul>
+        <li>1 <b>Missing logic</b> (no predecessor or successor), 2 <b>Leads</b>, 3 <b>Lags</b>, 4 <b>Relationship types</b> (at least 90% FS), 5 <b>Hard constraints</b>, 6 <b>High float</b> and 8 <b>High duration</b> (over 44 working days), 7 <b>Negative float</b>, 9 <b>Invalid dates</b> (actuals after the data date, forecasts before it), 10 <b>Resources</b> (tasks with none), 11 <b>Missed activities</b>, 13 <b>Critical path length index</b> and 14 <b>Baseline execution index</b>. Point 12 (critical path test) needs P6 to reschedule, so it isn't included. Start-to-finish relationships and the critical activities are listed too.</li>
+        <li>Each check shows the count, what it's out of, the value, DCMA's target and <b>Pass</b> or <b>Fail</b>.</li>
+        <li>11 and 14 compare with the baseline when one is loaded (File &gt; Compare with Baseline), otherwise with P6's planned dates.</li>
+        <li><b>Click a check</b> to show only the activities it flags (their WBS bands are opened); the status bar says which check is filtering. <b>Show All Activities</b> or <b>Clear Filters</b> goes back.</li>
+        <li><b>Export to Excel</b> saves the results and every flagged activity.</li>
       </ul>`,
   },
   {

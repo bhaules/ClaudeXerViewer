@@ -16,6 +16,8 @@ export interface ChangesPanelHost {
   onRemove(): void;
   /** Filters the grid to this kind of change. */
   onFilter(kind: ChangeKind | "any"): void;
+  /** Every change (and the counts) to Excel. */
+  onExport(): void;
 }
 
 interface Item {
@@ -64,6 +66,7 @@ export class ChangesPanel {
   private compare = el("button", "btn", ["Compare with Baseline..."]);
   private remove = el("button", "btn", ["Remove Baseline"]);
   private filter = el("button", "btn", ["Filter Activities"]);
+  private exportBtn = el("button", "btn", ["Export to Excel"]);
   private items: Item[] = [];
   private sortCol = 7;
   private sortDir: 1 | -1 = 1;
@@ -77,7 +80,9 @@ export class ChangesPanel {
       const v = this.show.value as ChangesShow;
       if (v !== "deleted") this.host.onFilter(v);
     });
-    const bar = el("div", "cm-bar", [el("span", "", ["Show"]), this.show, this.filter, el("span", "fb-sep"), this.compare, this.remove, this.summary]);
+    this.exportBtn.title = "Every change, including deleted activities, plus a summary of counts, as an .xlsx";
+    this.exportBtn.addEventListener("click", () => this.host.onExport());
+    const bar = el("div", "cm-bar", [el("span", "", ["Show"]), this.show, this.filter, this.exportBtn, el("span", "fb-sep"), this.compare, this.remove, this.summary]);
     this.root = el("div", "pane cm-pane", [bar, this.body]);
 
     this.body.addEventListener("click", (e) => {
@@ -103,6 +108,7 @@ export class ChangesPanel {
   render(): void {
     const cmp = this.host.comparison();
     this.remove.disabled = !cmp;
+    this.exportBtn.disabled = !cmp;
     this.filter.disabled = !cmp || this.show.value === "deleted";
     if (!cmp) {
       this.show.innerHTML = "";

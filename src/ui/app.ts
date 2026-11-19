@@ -31,7 +31,7 @@ import {
   type GridRow,
   type ViewState,
 } from "../xer/rows";
-import { buildActivitiesXlsx, XLSX_TYPE } from "../xer/xlsx";
+import { buildActivitiesXlsx, buildTableXlsx, XLSX_TYPE, type TableSheet } from "../xer/xlsx";
 import { el, esc, modal, splitter } from "./dom";
 import { openColumnFilter } from "./column-filter";
 import { openColumnsDialog } from "./columns-dialog";
@@ -43,6 +43,11 @@ import { RelationsPanel } from "./relations";
 import { DEFAULT_HISTOGRAM, ResourcePanel, type HistogramSettings } from "./resources";
 import { filterMenuItems, traceMenuItems } from "./filter-menu";
 import { ChangesPanel } from "./changes";
+import { DetailsPanel, type DetailsTab } from "./details";
+import { HealthPanel } from "./health";
+import { ResourceSpreadsheet } from "./spreadsheet";
+import { checkSchedule, type CheckResult } from "../xer/health";
+import { changesSheets, checkSheets, infoSheet } from "../xer/reports";
 import { showCalendars } from "./calendars";
 import { showAbout, showShortcuts, showUserGuide } from "./help";
 import { Search } from "./search";
@@ -62,12 +67,27 @@ interface Prefs {
   relLines: RelLines;
   showFilters: boolean;
   bottomTab: BottomTab;
+  /** Which Activity Details tab is showing. */
+  detailsTab: DetailsTab;
+  /** View > Bar Labels. */
+  barLabels: BarLabels;
   histogram: HistogramSettings;
   /** Name shown on review comments made in this browser. */
   reviewer: string;
 }
 
-type BottomTab = "relationships" | "resources" | "comments" | "changes";
+type BottomTab = "details" | "resources" | "spreadsheet" | "comments" | "changes" | "check";
+
+type BarLabels = "none" | "name" | "id" | "idName" | "finish" | "dates";
+
+const BAR_LABELS: [BarLabels, string][] = [
+  ["none", "None"],
+  ["name", "Activity Name"],
+  ["id", "Activity ID"],
+  ["idName", "Activity ID and Name"],
+  ["finish", "Finish Date"],
+  ["dates", "Start and Finish Dates"],
+];
 
 /** Unsaved comments are also kept here, per project, so closing the tab doesn't lose them. */
 const DRAFT_KEY = "xer-viewer-comment-draft:";
@@ -84,7 +104,9 @@ const DEFAULT_PREFS: Prefs = {
   showRelations: FEATURES.relationships,
   relLines: FEATURES.ganttRelationships ? "driving" : "none",
   showFilters: false,
-  bottomTab: "relationships",
+  bottomTab: "details",
+  detailsTab: "relationships",
+  barLabels: "none",
   histogram: DEFAULT_HISTOGRAM,
   reviewer: "",
 };
@@ -94,6 +116,8 @@ function loadPrefs(): Prefs {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<Prefs>;
     const prefs = { ...DEFAULT_PREFS, ...saved };
     prefs.histogram = { ...DEFAULT_HISTOGRAM, ...saved.histogram };
+    // Before 0.8 the first bottom tab was just Relationships; it's inside Activity Details now.
+    if ((prefs.bottomTab as string) === "relationships") prefs.bottomTab = "details";
     // UDF and activity code columns depend on the file; keep them for files that have them.
     prefs.columns = prefs.columns.filter((k) => COLUMN_BY_KEY.has(k) || /^(udf|code|codedesc):/.test(k));
     if (prefs.columns.length === 0) prefs.columns = DEFAULT_PREFS.columns;
@@ -168,6 +192,11 @@ export class App {
   private baseline: Schedule | null = null;
   private baselineInput!: HTMLInputElement;
   private changesPanel!: ChangesPanel;
+  private details!: DetailsPanel;
+  private health!: HealthPanel;
+  private spreadsheet!: ResourceSpreadsheet;
+  /** Schedule Check results for the open schedule and baseline. */
+  private healthCache: { s: Schedule; cmp: Comparison | null; results: CheckResult[] } | null = null;
   /** Rows waiting for the copy event (Edit menu copies go through execCommand). */
   private pendingCopy: CopiedTable | null = null;
 
@@ -236,6 +265,7 @@ export class App {
         return w ? [w.start, w.finish] : null;
       },
       showBaseline: () => this.cmp !== null,
+      barLabel: (a) => this.barLabel(a),
       onDraw: () => {
         if (this.resourceTabShown()) this.resources.draw();
       },
@@ -319,20 +349,63 @@ export class App {
       onCompare: () => this.baselineInput.click(),
       onRemove: () => this.removeBaseline(),
       onFilter: (k) => this.filterChanges(k),
+      onExport: () => void this.exportChanges(),
     });
     const chRow = el("div", "brow", [this.changesPanel.root]);
 
+    this.details = new DetailsPanel(
+      {
+        schedule: () => this.schedule,
+        columns: () => this.view.columns,
+        ctx: () => this.view.ctx,
+        tab: () => (FEATURES.activityDetails ? this.prefs.detailsTab : "relationships"),
+        setTab: (t) => {
+          this.prefs.detailsTab = t;
+          this.savePrefs();
+        },
+      },
+      relRow,
+    );
+    const detailsRow = el("div", "brow", [this.details.root]);
+    // Without the feature, only the Relationships part shows.
+    if (!FEATURES.activityDetails) this.details.root.classList.add("details-off");
+
+    this.spreadsheet = new ResourceSpreadsheet({
+      schedule: () => this.schedule,
+      dataDate: () => this.schedule?.projects[0]?.dataDate ?? null,
+      hoursPerWeek: () => this.prefs.histogram.hoursPerWeek,
+      onExport: (sheets, what) => void this.exportTables(sheets, "resource usage", what),
+    });
+    const ssRow = el("div", "brow", [this.spreadsheet.root]);
+
+    this.health = new HealthPanel({
+      results: () => this.healthResults(),
+      active: () => (this.filterState.check ? this.healthResults()?.find((r) => r.name === this.filterState.check!.name)?.id ?? null : null),
+      source: () => (this.cmp ? `the baseline (${this.cmp.name})` : "planned dates (no baseline loaded)"),
+      onPick: (r) => this.pickCheck(r),
+      onClear: () => {
+        this.filterState.check = null;
+        this.applyFilter();
+      },
+      onExport: () => void this.exportChecks(),
+    });
+    const hcRow = el("div", "brow", [this.health.root]);
+
     const tabs: [BottomTab, string, HTMLElement][] = [
-      ["relationships", "Relationships", relRow],
+      ["details", FEATURES.activityDetails ? "Activity Details" : "Relationships", detailsRow],
       ["resources", "Resource Usage", resRow],
+      ["spreadsheet", "Resource Spreadsheet", ssRow],
       ["comments", "Comments", cmRow],
       ["changes", "Changes", chRow],
+      ["check", "Schedule Check", hcRow],
     ];
     const tabStrip = el("div", "btabs");
     for (const [id, label, body] of tabs) {
       if (id === "resources" && !FEATURES.resourceHistogram) continue;
       if (id === "comments" && !FEATURES.comments) continue;
       if (id === "changes" && !FEATURES.baselineCompare) continue;
+      if (id === "spreadsheet" && !FEATURES.resourceSpreadsheet) continue;
+      if (id === "check" && !FEATURES.scheduleCheck) continue;
       const tab = el("div", "btab", [label]);
       tab.dataset.tab = id;
       tab.addEventListener("mousedown", () => this.setBottomTab(id));
@@ -341,7 +414,7 @@ export class App {
       if (id === "comments") this.commentsTab = tab;
     }
 
-    this.bottom = el("div", "bottom", [tabStrip, relRow, resRow, cmRow, chRow]);
+    this.bottom = el("div", "bottom", [tabStrip, detailsRow, resRow, ssRow, cmRow, chRow, hcRow]);
     this.bottomSplit = splitter("h", () => (this.dragStart = this.bottom.getBoundingClientRect().height), (d) => {
       this.bottom.style.height = `${Math.max(60, Math.min(this.workspace.clientHeight - 120, this.dragStart - d))}px`;
     });
@@ -451,6 +524,8 @@ export class App {
       this.compiled = { test: null, errors: new Set() };
       this.view.filter = null;
       this.resources.reset();
+      this.spreadsheet.reset();
+      this.healthCache = null;
       this.view.expanded = expandedToLevel(schedule, FEATURES.defaultExpandLevel);
       this.view.columns = new Map(scheduleColumns(schedule).map((c) => [c.key, c]));
       // A loaded baseline stays: compare the newly opened file with it.
@@ -474,7 +549,7 @@ export class App {
       this.changesPanel.render();
       this.grid.scrollTop = 0;
       this.gantt.scrollTop = 0;
-      this.showRelations(null);
+      this.showDetails(null);
       this.updateTitle();
       const open = liveComments(this.comments).filter((c) => c.status === "open").length;
       this.setStatus(
@@ -553,19 +628,21 @@ export class App {
     this.gantt.scrollTop = this.grid.scrollTop;
     this.grid.focus();
     this.gantt.draw();
+    this.showDetails(this.selected);
     if (row.kind === "act") {
-      this.showRelations(row.act);
       this.setStatus(`${row.act.code} – ${row.act.name}`);
     } else {
-      this.showRelations(null);
       this.setStatus(`WBS ${row.wbs.fullCode} – ${row.wbs.name} (${row.wbs.activityCount.toLocaleString()} activities)`);
     }
   }
 
-  private showRelations(a: Activity | null): void {
+  /** The bottom panel's Activity Details (Relationships, General, ...) follow the selection. */
+  private showDetails(item: Activity | Wbs | null): void {
     if (!this.prefs.showRelations) return;
+    const a = item && isActivity(item) ? item : null;
     this.preds.show(a);
     this.succs.show(a);
+    this.details.show(item);
   }
 
   private toggle(i: number): void {
@@ -717,6 +794,7 @@ export class App {
               this.preds.render();
               this.succs.render();
               this.changesPanel.render();
+              this.details.render();
             },
           })),
       },
@@ -767,10 +845,12 @@ export class App {
     }
     if (FEATURES.relationships) {
       // P6's "Show on Bottom": which tab the bottom panel shows, or none.
-      const tabs: [BottomTab, string][] = [["relationships", "Relationships"]];
+      const tabs: [BottomTab, string][] = [["details", FEATURES.activityDetails ? "Activity Details" : "Relationships"]];
       if (FEATURES.resourceHistogram) tabs.push(["resources", "Resource Usage"]);
+      if (FEATURES.resourceSpreadsheet) tabs.push(["spreadsheet", "Resource Spreadsheet"]);
       if (FEATURES.comments) tabs.push(["comments", "Comments"]);
       if (FEATURES.baselineCompare) tabs.push(["changes", "Changes"]);
+      if (FEATURES.scheduleCheck) tabs.push(["check", "Schedule Check"]);
       panels.push({
         label: "Show on Bottom",
         items: () => [
@@ -800,6 +880,21 @@ export class App {
                 this.prefs.relLines = m;
                 this.savePrefs();
                 this.updateRelLines();
+                this.gantt.draw();
+              },
+            })),
+        });
+      }
+      if (FEATURES.barLabels) {
+        items.push({
+          label: "Bar Labels",
+          items: () =>
+            BAR_LABELS.map(([m, label]) => ({
+              label,
+              checked: () => this.prefs.barLabels === m,
+              action: () => {
+                this.prefs.barLabels = m;
+                this.savePrefs();
                 this.gantt.draw();
               },
             })),
@@ -1007,6 +1102,7 @@ export class App {
       { label: "Show Comments", enabled: loaded, action: () => this.showCommentsTab() },
       { label: "Import Reviewers' Files...", enabled: loaded, action: () => this.importInput.click() },
       "-",
+      ...(FEATURES.scheduleCheck ? [{ label: "Schedule Check", enabled: loaded, action: () => this.showBottom("check") }, "-" as const] : []),
       { label: `Your Name${this.prefs.reviewer ? `: ${this.prefs.reviewer}` : ""}...`, action: () => void this.ensureReviewer(true) },
     ];
   }
@@ -1207,8 +1303,7 @@ export class App {
     if (show !== this.prefs.showRelations) {
       this.prefs.showRelations = show;
       this.applyPanelVisibility();
-      const sel = this.selected;
-      this.showRelations(sel && isActivity(sel) ? sel : null);
+      this.showDetails(this.selected);
     }
     if (tab) {
       this.setBottomTab(tab);
@@ -1254,6 +1349,8 @@ export class App {
     if (byResource) notes.push(`resource: ${this.resources.selectionLabel()}`);
     if (this.filterState.trace) notes.push(`trace: ${describeTrace(this.filterState.trace)}`);
     if (this.filterState.changes.size) notes.push("changes vs baseline");
+    if (this.filterState.check) notes.push(`check: ${this.filterState.check.name}`);
+    if (this.prefs.showRelations && this.prefs.bottomTab === "check") this.health.render();
     this.filterStatus(test ? shown : null, notes);
     this.toolbar.refresh();
   }
@@ -1290,8 +1387,10 @@ export class App {
     const tab =
       (t === "resources" && !FEATURES.resourceHistogram) ||
       (t === "comments" && !FEATURES.comments) ||
-      (t === "changes" && !FEATURES.baselineCompare)
-        ? "relationships"
+      (t === "changes" && !FEATURES.baselineCompare) ||
+      (t === "spreadsheet" && !FEATURES.resourceSpreadsheet) ||
+      (t === "check" && !FEATURES.scheduleCheck)
+        ? "details"
         : t;
     for (const n of this.bottom.querySelectorAll<HTMLElement>("[data-tab]")) {
       if (n.classList.contains("btab")) n.classList.toggle("active", n.dataset.tab === tab);
@@ -1303,6 +1402,9 @@ export class App {
     }
     if (tab === "comments") this.commentsPanel.render();
     if (tab === "changes") this.changesPanel.render();
+    if (tab === "spreadsheet") this.spreadsheet.render();
+    if (tab === "check") this.health.render();
+    if (tab === "details") this.details.render();
   }
 
   /** The resource list matches the grid's width so the histogram lines up under the Gantt. */
@@ -1438,8 +1540,32 @@ export class App {
       this.setStatus("Nothing to export: no rows match the current filters.");
       return;
     }
-    const fileName = this.fileName.replace(/\.xer$/i, "") + ".xlsx";
-    // Chrome and Edge can ask where to save; other browsers download it.
+    const p = s.projects[0];
+    await this.saveXlsx(
+      this.baseName() + ".xlsx",
+      () =>
+        buildActivitiesXlsx({
+          sheetName: p?.shortName || "Activities",
+          columns: this.columns().map((column) => ({ column, width: this.prefs.widths[column.key] ?? column.width })),
+          rows,
+          ctx,
+          wbsColors,
+          info: this.exportInfo(rows, allRows),
+        }),
+      `${rows.length.toLocaleString()} rows`,
+    );
+  }
+
+  /** The open file's name without .xer. */
+  private baseName(): string {
+    return this.fileName.replace(/\.xer$/i, "");
+  }
+
+  /**
+   * Asks where to save (Chrome and Edge) or downloads (other browsers), then writes the
+   * workbook `build` makes. `what` describes it in the status bar.
+   */
+  private async saveXlsx(fileName: string, build: () => Promise<Uint8Array>, what: string): Promise<void> {
     let handle: FileSystemFileHandle | null = null;
     const picker = (window as { showSaveFilePicker?: (o: object) => Promise<FileSystemFileHandle> }).showSaveFilePicker;
     if (picker) {
@@ -1454,27 +1580,102 @@ export class App {
     }
     this.setStatus("Building Excel file...");
     try {
-      const p = s.projects[0];
-      const bytes = await buildActivitiesXlsx({
-        sheetName: p?.shortName || "Activities",
-        columns: this.columns().map((column) => ({ column, width: this.prefs.widths[column.key] ?? column.width })),
-        rows,
-        ctx,
-        wbsColors,
-        info: this.exportInfo(rows, allRows),
-      });
+      const bytes = await build();
       if (handle) {
         const w = await handle.createWritable();
         await w.write(bytes);
         await w.close();
-        this.setStatus(`Exported ${rows.length.toLocaleString()} rows to ${handle.name}.`);
+        this.setStatus(`Exported ${what} to ${handle.name}.`);
       } else {
         downloadText(fileName, bytes, XLSX_TYPE);
-        this.setStatus(`Exported ${rows.length.toLocaleString()} rows to ${fileName} (in your Downloads folder).`);
+        this.setStatus(`Exported ${what} to ${fileName} (in your Downloads folder).`);
       }
     } catch (e) {
       console.error(e);
       this.setStatus(`Excel export failed: ${(e as Error).message}`);
+    }
+  }
+
+  /** Common rows for the Export Info sheet of the extra exports. */
+  private infoRows(extra: [string, string][] = []): [string, string][] {
+    const p = this.schedule?.projects[0];
+    return [
+      ["Source file", this.fileName],
+      ["Project", p ? `${p.shortName} - ${p.name}` : ""],
+      ["Data date", p ? formatDate(p.dataDate) : ""],
+      ...extra,
+      ["Exported", new Date().toLocaleString()],
+      ["Exported with", `XER Viewer ${__APP_VERSION__}`],
+    ];
+  }
+
+  /** Changes tab > Export to Excel: every change and the counts. */
+  private async exportChanges(): Promise<void> {
+    const cmp = this.cmp;
+    if (!cmp) return;
+    const units = { h: "Hours", d: "Days", w: "Weeks", m: "Months" } as const;
+    const sheets = [
+      ...changesSheets(cmp, this.view.ctx.unit),
+      infoSheet(this.infoRows([
+        ["Baseline", cmp.name],
+        ["Baseline data date", formatDate(cmp.baseline.projects[0]?.dataDate ?? null)],
+        ["Duration unit", units[this.view.ctx.unit]],
+        ["Variance", "Baseline minus current, in working time on each activity's calendar: negative means later than the baseline."],
+        ["Left out", "Activities that were only progressed (no other change)."],
+      ])),
+    ];
+    await this.saveXlsx(`${this.baseName()} - changes.xlsx`, () => buildTableXlsx(sheets), "the changes");
+  }
+
+  /** Schedule Check > Export to Excel. */
+  private async exportChecks(): Promise<void> {
+    const results = this.healthResults();
+    if (!results) return;
+    const sheets = [
+      ...checkSheets(results, this.view.ctx.unit),
+      infoSheet(this.infoRows([["Missed activities and BEI use", this.cmp ? `the baseline (${this.cmp.name})` : "planned dates (no baseline loaded)"]])),
+    ];
+    await this.saveXlsx(`${this.baseName()} - schedule check.xlsx`, () => buildTableXlsx(sheets), "the schedule check");
+  }
+
+  /** Resource Spreadsheet > Export to Excel (it builds its own sheets). */
+  private async exportTables(sheets: TableSheet[], name: string, what: string): Promise<void> {
+    // Put the source file and project at the top of the panel's own Export Info sheet.
+    sheets = sheets.map((t) => (t.name === "Export Info" ? { ...t, rows: [...infoSheet(this.infoRows()).rows.slice(0, 2), ...t.rows] } : t));
+    await this.saveXlsx(`${this.baseName()} - ${name}.xlsx`, () => buildTableXlsx(sheets), what);
+  }
+
+  // ---------- Schedule Check ----------
+
+  private healthResults(): CheckResult[] | null {
+    const s = this.schedule;
+    if (!s) return null;
+    const cmp = this.cmp;
+    if (!this.healthCache || this.healthCache.s !== s || this.healthCache.cmp !== cmp) {
+      this.healthCache = { s, cmp, results: checkSchedule(s, cmp) };
+    }
+    return this.healthCache.results;
+  }
+
+  /** Shows only the activities a check flagged, opening the WBS they are in. */
+  private pickCheck(r: CheckResult): void {
+    this.filterState.check = { name: r.name, ids: r.activities };
+    for (const a of r.activities) revealActivity(this.view.expanded, a);
+    this.applyFilter();
+    const n = r.activities.size;
+    this.setStatus(`${r.name}: showing the ${n.toLocaleString()} activit${n === 1 ? "y" : "ies"} it flags. Show All Activities (or Clear Filters) to go back.`);
+  }
+
+  // ---------- Gantt bar labels ----------
+
+  private barLabel(a: Activity): string {
+    switch (FEATURES.barLabels ? this.prefs.barLabels : "none") {
+      case "name": return a.name;
+      case "id": return a.code;
+      case "idName": return `${a.code}  ${a.name}`;
+      case "finish": return formatDate(a.finish, a.finishActual);
+      case "dates": return `${formatDate(a.start, a.startActual)} – ${formatDate(a.finish, a.finishActual)}`;
+      default: return "";
     }
   }
 
@@ -1498,6 +1699,7 @@ export class App {
     if (this.resourceTabShown() && this.resources.activityFilter()) other.push(`Resource: ${this.resources.selectionLabel()}`);
     if (f.trace) other.push(`Trace: ${describeTrace(f.trace)}`);
     if (f.changes.size) other.push(`Changes vs baseline: ${[...f.changes].join(", ")}`);
+    if (f.check) other.push(`Schedule check: ${f.check.name}`);
     const p = this.schedule?.projects[0];
     const sort = this.view.sort;
     const units = { h: "Hours", d: "Days", w: "Weeks", m: "Months" } as const;

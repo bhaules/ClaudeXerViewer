@@ -189,6 +189,21 @@ const lines = [
       { task_pred_id: "6", task_id: "1004", pred_task_id: "5555", pred_type: "PR_FS", lag_hr_cnt: "0" },
     ].map((r) => ({ proj_id: "100", pred_proj_id: "100", ...r })),
   ),
+  // Notebook topics and notes. P6 stores notes as HTML, with 0x7F between lines.
+  ...table("MEMOTYPE", ["memo_type_id", "seq_num", "eps_flag", "proj_flag", "wbs_flag", "task_flag", "memo_type"], [
+    { memo_type_id: "1", seq_num: "1", task_flag: "Y", memo_type: "Scope" },
+    { memo_type_id: "2", seq_num: "2", task_flag: "Y", memo_type: "Assumptions" },
+  ]),
+  ...table("TASKMEMO", ["memo_id", "task_id", "memo_type_id", "proj_id", "task_memo"], [
+    { memo_id: "1", task_id: "1004", memo_type_id: "2", proj_id: "100", task_memo: "<HTML><BODY><P>Rock is &lt;2m deep &amp; dry.</P>\x7f\x7f<UL><LI>Two excavators</LI><LI>Day shift only</LI></UL><script>alert(1)</script></BODY></HTML>" },
+    { memo_id: "2", task_id: "1004", memo_type_id: "1", proj_id: "100", task_memo: "Bulk excavation\x7f\x7fto RL 100" },
+    { memo_id: "3", task_id: "9999", memo_type_id: "1", proj_id: "100", task_memo: "No such activity" },
+  ]),
+  // Activity steps.
+  ...table("TASKPROC", ["proc_id", "task_id", "proj_id", "seq_num", "proc_name", "complete_flag", "proc_wt", "complete_pct", "proc_descr"], [
+    { proc_id: "2", task_id: "1002", proj_id: "100", seq_num: "20", proc_name: "Issue for review", complete_flag: "N", proc_wt: "3", complete_pct: "0", proc_descr: "" },
+    { proc_id: "1", task_id: "1002", proj_id: "100", seq_num: "10", proc_name: "Draft drawings", complete_flag: "Y", proc_wt: "1", complete_pct: "100", proc_descr: "<P>All sheets</P>" },
+  ]),
   "%E",
 ];
 

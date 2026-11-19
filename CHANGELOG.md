@@ -3,6 +3,36 @@
 All notable changes to XER Viewer. Each version is a GitHub release with the viewer
 attached as `xer-viewer-v<version>.html` (`xer-viewer.html` before 0.6.0).
 
+## 0.8.0 (2026-11-19)
+
+### Added
+- **Activity Details.** The first bottom tab is now **Activity Details**, like P6's, with
+  tabs for the selected activity:
+  - **General**: IDs, status, WBS, calendar, durations, float, dates, constraints, units,
+    and baseline dates and changes when a baseline is loaded. A selected WBS band shows its
+    summary.
+  - **Relationships**: the Predecessors and Successors panels (as before).
+  - **Resources**: assignments with budgeted, actual, remaining and at-completion units
+    and dates.
+  - **Codes** and **UDFs**: every activity code and user defined field on the activity.
+  - **Notebook**: notebook notes by topic, as plain text.
+  - **Steps**: steps with weight, % complete, description and the weighted total.
+- **Schedule Check.** **Review > Schedule Check** runs a DCMA 14-point style health check
+  (missing logic, leads, lags, relationship types, hard constraints, high and negative
+  float, high duration, invalid dates, resources, missed activities, CPLI, BEI) with pass /
+  fail. Click a check to show the activities it flags; **Export to Excel** saves the results
+  and every flagged activity.
+- **Resource Spreadsheet.** A bottom tab with resource usage as a table per week, month,
+  quarter or year (total, actual or remaining units, or manning), exported to Excel.
+- **Bar labels.** **View > Bar Labels** writes the activity name, ID, both, the finish
+  date, or the start and finish dates next to each Gantt bar.
+- **Changes to Excel.** **Export to Excel** on the Changes tab saves every change
+  (deleted activities included) and a summary of counts.
+
+### Changed
+- **Calendars** dialog shows the whole year on one screen, with the work week across the
+  top.
+
 ## 0.7.0 (2026-11-19)
 
 ### Added
