@@ -2,7 +2,9 @@
 
 A read-only viewer for Primavera P6 `.xer` files that looks and works like P6's
 Activities view. It's a single HTML file, so it opens in any browser with
-nothing to install. The schedule is read inside the browser and never uploaded.
+nothing to install. The schedule is read inside the browser and never uploaded. At
+startup it asks GitHub whether there is a newer version (turn it off with **Help >
+Check at Startup**); that is its only network request.
 
 ## Sharing a schedule (instead of a PDF)
 
@@ -59,9 +61,11 @@ in the same browser.
 - **Toolbar**: the everyday commands as buttons under the menus (Open, Save, Export
   to Excel, Expand/Collapse All, Find, the Filter menu, Gantt and zoom, Add Comment, Help).
   Hover one for its shortcut. **View > Toolbar** hides it.
-- **WBS**: double-click a band or click its arrow to expand/collapse.
+- **Right-click** the grid or Gantt for comments, copy, Trace Logic, Expand / Collapse
+  All, Columns, Relationship Lines, Bar Labels, Timescale and zoom.
+- **WBS**: a schedule opens fully expanded. Double-click a band or click its arrow to expand/collapse.
   **View > Expand All / Collapse All / Expand To > Level n**.
-- **Columns**: drag a header edge to resize. Click a header to sort activities
+- **Columns**: drag a header to move its column, or its edge to resize. Click a header to sort activities
   within each WBS (click again for descending, a third time to reset).
   Right-click a header to sort, filter or hide that column.
   **View > Columns...** opens the Columns dialog:
@@ -79,7 +83,8 @@ in the same browser.
   excludes); numbers and dates take `>`, `<`, `>=`, `<=`, `=`, e.g. `>0` in Remaining
   Labor Units or `<01-Jul-26` in Finish. While filtered, a yellow note in the status
   bar gives the count; WBS totals show only what the filter matches. The selected
-  activity stays selected and in view. **Clear Filters** resets everything.
+  activity stays selected and in view. Jumping to an activity the filter hides shows it
+  until the filter is reapplied, like P6. **Clear Filters** resets everything.
 - **Column filters**: the funnel on each column header opens an Excel-style filter:
   tick the values to keep (with counts, and (Blanks)), search the list, type a
   condition, or sort the column. A filtered column's funnel turns blue. Column filters
@@ -99,7 +104,8 @@ in the same browser.
   and type in the boxes under them to filter it (e.g. `>20000` in Budgeted Units);
   **All Resources** then means the resources still listed.
   The **Resource Spreadsheet** tab shows the same as a table (per week, month, quarter
-  or year; total, actual or remaining; optionally manning) and exports it to Excel.
+  or year; total, actual or remaining; optionally manning, with your own hours per
+  person for each period). Select rows and Ctrl+C to copy them, or export to Excel.
   **Bars by** sets the bar period (Week by default) independently of the Gantt zoom:
   press **Fit project** to squeeze the whole project into view and keep weekly bars.
   Tick **Manning** and enter the hours one person works per week (e.g. 70 for
@@ -126,7 +132,8 @@ in the same browser.
 - **Find**: Ctrl+F, then Enter / F3 for next and Shift+Enter / Shift+F3 for previous.
 - **Bottom panel**: **View > Show on Bottom** picks Activity Details, Resource Usage,
   Resource Spreadsheet, Comments, Changes, Schedule Check or None, like P6.
-- **Gantt**: Ctrl+mouse wheel to zoom, **View > Zoom** and **View > Go to Data Date**.
+- **Gantt**: drag left / right on it to make the weeks (or months...) narrower / wider,
+  or fix the periods with **View > Timescale**. Ctrl+mouse wheel to zoom, **View > Zoom** and **View > Go to Data Date**.
   Double-click a row in the Gantt to zoom to its bar, like P6 (also **View > Zoom >
   Zoom to Selected**). **View > Bar Labels** writes the name, ID or dates next to bars.
   Driving relationships are drawn as arrows (red on the critical path). Choose

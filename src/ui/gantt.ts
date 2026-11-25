@@ -20,6 +20,8 @@ export interface GanttHost {
   onSelect(index: number): void;
   /** Double-click on a row: the app zooms to its bar. */
   onDoubleClick(index: number): void;
+  /** Right-click: on a row, or -1 for the empty area and the timescale. */
+  onContextMenu(index: number, x: number, y: number): void;
   onScroll(scrollTop: number): void;
   /** Baseline [start, finish] for a row, or null; only called while showBaseline() is true. */
   baseline(row: GridRow): [number | null, number | null] | null;
@@ -43,6 +45,31 @@ export interface GanttView {
 
 export type Unit = "year" | "quarter" | "month" | "week" | "day";
 
+/** View > Timescale: the two header tiers, or Auto to follow the zoom. */
+export type Timescale = "auto" | "yearQuarter" | "yearMonth" | "monthWeek" | "weekDay";
+
+export const TIMESCALES: [Timescale, string][] = [
+  ["auto", "Auto (follows the zoom)"],
+  ["yearQuarter", "Year / Quarter"],
+  ["yearMonth", "Year / Month"],
+  ["monthWeek", "Month / Week"],
+  ["weekDay", "Week / Day"],
+];
+
+const TIERS: Record<Exclude<Timescale, "auto">, [Unit, Unit]> = {
+  yearQuarter: ["year", "quarter"],
+  yearMonth: ["year", "month"],
+  monthWeek: ["month", "week"],
+  weekDay: ["week", "day"],
+};
+
+const UNIT_DAYS: Record<Unit, number> = { year: 365.25, quarter: 91.31, month: 30.44, week: 7, day: 1 };
+/** Narrowest period worth its own label. Narrower ones are labelled every 2nd, 3rd, ... with room for a full label. */
+const MIN_LABEL: Record<Unit, number> = { year: 30, quarter: 42, month: 12, week: 24, day: 15 };
+const FULL_LABEL: Record<Unit, number> = { year: 30, quarter: 42, month: 72, week: 64, day: 15 };
+/** Mouse travel before a press becomes a drag. */
+const DRAG_START = 5;
+
 export class Gantt {
   readonly root: HTMLElement;
   private headCanvas = el("canvas");
@@ -54,6 +81,10 @@ export class Gantt {
   private start = 0;
   private end = 0;
   private ppd = 3; // pixels per day
+  /** View > Timescale. */
+  private timescale: Timescale = "auto";
+  /** Tiers held since a drag, so stretching doesn't switch weeks to months; until the next zoom. */
+  private held: [Unit, Unit] | null = null;
   private frame = 0;
   /** scrollTop last set by the scrollTop setter (syncing to the grid), until its echo arrives. */
   private syncedTop: number | null = null;
@@ -82,9 +113,18 @@ export class Gantt {
       this.host.onScroll(top);
     });
     this.scroller.addEventListener("mousedown", (e) => {
+      if (e.offsetX >= this.scroller.clientWidth || e.offsetY >= this.scroller.clientHeight) return; // on a scrollbar
       const i = this.rowAt(e);
       if (i >= 0) this.host.onSelect(i);
+      this.startStretch(e);
     });
+    this.head.addEventListener("mousedown", (e) => this.startStretch(e));
+    for (const area of [this.scroller, this.head]) {
+      area.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        this.host.onContextMenu(area === this.scroller ? this.rowAt(e) : -1, e.clientX, e.clientY);
+      });
+    }
     this.scroller.addEventListener("dblclick", (e) => {
       const i = this.rowAt(e);
       if (i >= 0) this.host.onDoubleClick(i);
@@ -111,6 +151,7 @@ export class Gantt {
   }
 
   fit(): void {
+    this.held = null;
     const width = this.scroller.clientWidth || 600;
     this.ppd = clamp(width / ((this.end - this.start) / DAY), MIN_PPD, MAX_PPD);
     this.update();
@@ -118,6 +159,7 @@ export class Gantt {
   }
 
   zoom(factor: number, anchorX = this.scroller.clientWidth / 2): void {
+    this.held = null;
     const anchorDate = this.xToDate(this.scroller.scrollLeft + anchorX);
     this.ppd = clamp(this.ppd * factor, MIN_PPD, MAX_PPD);
     this.update();
@@ -129,6 +171,7 @@ export class Gantt {
    * Short or zero-length ranges (milestones) get a two-week window.
    */
   focusRange(start: number, finish: number): void {
+    this.held = null;
     const w = this.scroller.clientWidth || 600;
     const span = Math.max(finish - start, 14 * DAY);
     const mid = (start + finish) / 2;
@@ -197,8 +240,47 @@ export class Gantt {
       pixelsPerDay: this.ppd,
       scrollLeft: this.scroller.scrollLeft,
       width: this.scroller.clientWidth,
-      unit: this.tiers()[1],
+      unit: this.labelledUnit(),
     };
+  }
+
+  setTimescale(t: Timescale): void {
+    this.timescale = t;
+    this.held = null;
+    this.draw();
+  }
+
+  /**
+   * Drag left / right on the chart or the timescale to make periods narrower / wider. The
+   * date grabbed stays under where it was pressed, and the tiers (e.g. weeks) don't change.
+   */
+  private startStretch(e: MouseEvent): void {
+    if (e.button !== 0) return;
+    const startX = e.clientX;
+    const startPpd = this.ppd;
+    const anchorX = startX - this.scroller.getBoundingClientRect().left;
+    const anchorDate = this.xToDate(this.scroller.scrollLeft + anchorX);
+    let dragging = false;
+    const move = (ev: MouseEvent) => {
+      if (!(ev.buttons & 1)) return up();
+      const dx = ev.clientX - startX;
+      if (!dragging) {
+        if (Math.abs(dx) < DRAG_START) return;
+        dragging = true;
+        this.held = this.tiers();
+        document.body.classList.add("stretching");
+      }
+      this.ppd = clamp(startPpd * Math.exp(dx / 220), MIN_PPD, MAX_PPD);
+      this.update();
+      this.scroller.scrollLeft = this.dateToX(anchorDate) - anchorX;
+    };
+    const up = () => {
+      document.body.classList.remove("stretching");
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   }
 
   private dateToX(ms: number): number {
@@ -214,7 +296,37 @@ export class Gantt {
     return i < this.host.rows().length ? i : -1;
   }
 
+  /** The lower tier, or the next unit up while its periods are too narrow to label each one. */
+  private labelledUnit(): Unit {
+    const order: Unit[] = ["day", "week", "month", "quarter", "year"];
+    let i = order.indexOf(this.tiers()[1]);
+    while (i < order.length - 1 && UNIT_DAYS[order[i]] * this.ppd < 6) i++;
+    return order[i];
+  }
+
+  /**
+   * The periods of a tier that get a line and label, as [start, end) in view. When periods
+   * are too narrow to label, only every 2nd, 3rd, ... one, counted from a fixed point so
+   * the labels don't jump while scrolling.
+   */
+  private periods(unit: Unit, from: number, to: number): [number, number][] {
+    const width = UNIT_DAYS[unit] * this.ppd;
+    const step = width >= MIN_LABEL[unit] ? 1 : Math.ceil(FULL_LABEL[unit] / width);
+    const out: [number, number][] = [];
+    let t = floorTo(from - (step - 1) * UNIT_DAYS[unit] * DAY, unit);
+    while (periodIndex(t, unit) % step !== 0) t = floorTo(t - 1, unit);
+    while (t < to) {
+      let end = t;
+      for (let k = 0; k < step; k++) end = next(end, unit);
+      out.push([t, end]);
+      t = end;
+    }
+    return out;
+  }
+
   private tiers(): [Unit, Unit] {
+    if (this.held) return this.held;
+    if (this.timescale !== "auto") return TIERS[this.timescale];
     if (this.ppd < 0.6) return ["year", "quarter"];
     if (this.ppd < 4) return ["year", "month"];
     if (this.ppd < 18) return ["month", "week"];
@@ -265,9 +377,9 @@ export class Gantt {
     const tier = (unit: Unit, y0: number, y1: number) => {
       ctx.strokeStyle = GANTT.headerLine;
       ctx.fillStyle = GANTT.headerText;
-      for (let t = floorTo(from, unit); t < to; t = next(t, unit)) {
+      for (const [t, end] of this.periods(unit, from, to)) {
         const x0 = Math.round(this.dateToX(t) - left) + 0.5;
-        const x1 = this.dateToX(next(t, unit)) - left;
+        const x1 = this.dateToX(end) - left;
         ctx.beginPath();
         ctx.moveTo(x0, y0);
         ctx.lineTo(x0, y1);
@@ -310,7 +422,7 @@ export class Gantt {
     const from = this.xToDate(left);
     const to = this.xToDate(left + w);
     ctx.lineWidth = 1;
-    for (let t = floorTo(from, bottom); t < to; t = next(t, bottom)) {
+    for (const [t] of this.periods(bottom, from, to)) {
       const x = Math.round(this.dateToX(t) - left) + 0.5;
       ctx.strokeStyle = GANTT.gridLine;
       ctx.beginPath();
@@ -573,6 +685,18 @@ export class Gantt {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
+}
+
+/** Counts periods from a fixed point, for labelling every nth one. */
+function periodIndex(ms: number, unit: Unit): number {
+  const d = new Date(ms);
+  switch (unit) {
+    case "year": return d.getUTCFullYear();
+    case "quarter": return d.getUTCFullYear() * 4 + Math.floor(d.getUTCMonth() / 3);
+    case "month": return d.getUTCFullYear() * 12 + d.getUTCMonth();
+    case "week": return Math.floor((ms / DAY + 3) / 7);
+    default: return Math.floor(ms / DAY);
+  }
 }
 
 export function floorTo(ms: number, unit: Unit): number {

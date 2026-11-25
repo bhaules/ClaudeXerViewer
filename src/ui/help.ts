@@ -1,6 +1,8 @@
 // Help > User Guide, Keyboard Shortcuts and About. Keep this in step with the features:
 // when you add or change something users can do, describe it here.
-import { modal } from "./dom";
+import changelog from "../../CHANGELOG.md?raw";
+import { parseChangelog } from "../xer/changelog";
+import { esc, modal } from "./dom";
 import { GANTT, wbsColors } from "./theme";
 
 const swatch = (color: string, shape: "bar" | "diamond" | "line" | "summary" = "bar") =>
@@ -24,6 +26,8 @@ const SECTIONS: Section[] = [
         <li>The <b>toolbar</b> under the menus has the everyday commands: Open, Save, Export to Excel, Expand / Collapse All, Find, the Filter menu, Clear Filters, Gantt Chart, Zoom In / Out / to Fit, Go to Data Date, Add Comment and this guide. Hover a button for its name and shortcut. <b>View &gt; Toolbar</b> hides it.</li>
         <li>The title bar shows the project and its <b>data date</b>. The status bar shows what's selected and how many activities and relationships the file has.</li>
         <li>Your choices (columns, widths, units, panels, histogram settings) are remembered in this browser.</li>
+        <li><b>Refreshing</b> the page closes an opened .xer, because a browser can't reopen a file by itself. It asks first (in the browser's own words) when you refresh or close the tab. Saved viewer files keep their schedule.</li>
+        <li><b>Updates:</b> when the viewer starts it checks GitHub for a newer version and offers the download. <b>Help &gt; Check at Startup</b> turns that off; <b>Help &gt; Check for Updates</b> checks now. <b>Help &gt; What's New</b> lists what changed in each version.</li>
       </ul>`,
   },
   {
@@ -32,9 +36,10 @@ const SECTIONS: Section[] = [
     html: `
       <ul>
         <li>Activities are grouped by <b>WBS</b>. Click a band's arrow, double-click it, or press → / ← to expand or collapse it.</li>
-        <li><b>View &gt; Expand All</b>, <b>Collapse All</b> and <b>Expand To &gt; Level n</b> open the whole tree to a level.</li>
+        <li>A schedule opens with everything expanded. <b>View &gt; Expand All</b>, <b>Collapse All</b> and <b>Expand To &gt; Level n</b> open the whole tree to a level.</li>
         <li>Move with ↑ ↓, Page Up/Down, Home and End. ← on an activity jumps up to its WBS band.</li>
         <li>WBS bands show the summarised <b>Start</b> and <b>Finish</b>, the lowest <b>Total Float</b> and labour totals. Their <b>Original Duration</b> is the working time between the band's summarised Start and Finish, on the calendar most of its activities use (so a Christmas shutdown in the activities' calendar is left out even if the project calendar has none); <b>Remaining Duration</b> is the same from the data date (0 once everything under it is complete). They are not added up from the activities, so overlapping activities aren't counted twice. Both show in the Duration Unit, like the activities.</li>
+        <li><b>Right-click</b> a row in the grid or the Gantt (or an empty area) for comments, copy, Trace Logic, zoom, Expand / Collapse All, Columns, Relationship Lines, Bar Labels and Timescale.</li>
         <li>The selected row is highlighted in <b>amber</b> in the grid and the Gantt, so it stands out from the blue WBS bands.</li>
         <li>Dates follow P6: <b>A</b> after a date means actual; <b>*</b> means a constraint applies.</li>
         <li><b>View &gt; Hide Empty WBS</b> hides bands with no activities under them.</li>
@@ -60,7 +65,7 @@ const SECTIONS: Section[] = [
           </ul>
         </li>
         <li>Code and UDF columns are saved by name, so a layout carries over to other files that use the same codes and UDFs.</li>
-        <li>Drag the edge of a header to resize a column.</li>
+        <li>Drag a <b>header</b> left or right to move its column (Esc cancels). Drag the <b>edge</b> of a header to resize it.</li>
         <li>The <b>funnel</b> on each header opens that column's filter: sort buttons, a condition, and a list of the column's values to tick (see Find and filters).</li>
         <li><b>Right-click a column header</b> to sort it, filter it, clear its filter, hide it, or open the Columns dialog.</li>
         <li>Click a header to sort activities <b>within each WBS</b>; click again for descending, a third time to go back to the default (Start, then Activity ID). <b>View &gt; Clear Sort</b> also resets it.</li>
@@ -78,6 +83,7 @@ const SECTIONS: Section[] = [
         <li><b>Column funnel:</b> click the funnel on a column header for an Excel-style filter. Tick the values to keep (with how many activities have each; <i>(Blanks)</i> is the empty ones), search the list, type a condition (same as the filter row), or sort the column. The list only shows values left in by the other filters. A filtered column's funnel turns blue.</li>
         <li>While anything is filtered, a yellow note in the status bar says how many activities are showing, and the toolbar's funnel button is pressed. WBS bands only show matching activities and their totals are added up from those, like P6.</li>
         <li><b>Clear Filters</b> (Filter menu or toolbar) resets everything, including a resource selected on the Resource Usage tab. Hiding the filter row keeps what you typed; those columns' funnels stay blue.</li>
+        <li>Jumping to an activity the filter hides (from Relationships, Changes or Comments) <b>shows it anyway</b>, like P6, and the status bar says so in red. It goes when the filter changes, or with <b>Filter &gt; Reapply Filter</b>.</li>
         <li>The <b>selected activity stays selected</b> while you filter. If it is still showing it stays where it was on screen, and when a filter that hid it is cleared, the grid scrolls back to it.</li>
         <li>Changing the Duration Unit drops values ticked in duration columns, since they were in the old unit.</li>
       </ul>`,
@@ -130,6 +136,7 @@ const SECTIONS: Section[] = [
       </p>
       <ul>
         <li><b>Zoom:</b> Ctrl + mouse wheel over the chart, or <b>View &gt; Zoom</b> (In, Out, Zoom to Fit). <b>View &gt; Go to Data Date</b> scrolls to the data date.</li>
+        <li><b>Stretch the timescale:</b> press on the chart or its timescale and drag left to make the periods narrower or right to make them wider. The date you grab stays put and the periods don't change (weeks stay weeks), until you zoom again. <b>View &gt; Timescale</b> fixes the periods at every zoom.</li>
         <li><b>View &gt; Bar Labels</b> writes the Activity Name, Activity ID, both, the Finish date, or the Start and Finish dates next to each bar, as on a printout.</li>
         <li><b>Double-click a row in the Gantt</b> to zoom to its bar, like P6: the bar is centred and fills about half the chart (milestones get a two-week window). <b>View &gt; Zoom &gt; Zoom to Selected</b> and <b>Zoom to Bar</b> on the row's right-click menu do the same.</li>
         <li><b>Relationship lines</b> (<b>View &gt; Relationship Lines</b>): <b>Driving Only</b> (default) draws the relationships that drive each activity's dates; <b>All</b> adds the rest as dashed lines; <b>None</b> hides them. Lines are red when both ends are critical, and drawn thicker for the selected activity.</li>
@@ -148,6 +155,7 @@ const SECTIONS: Section[] = [
         <li><b>Resources:</b> the resources assigned, with budgeted, actual, remaining and at-completion units and their dates.</li>
         <li><b>Codes:</b> every activity code assigned, with its description. <b>UDFs:</b> every user defined field with a value.</li>
         <li><b>Notebook:</b> its notebook notes by topic, as plain text. <b>Steps:</b> its steps with weight, % complete and description, and the weighted total.</li>
+        <li><b>Copying:</b> select text on General and Notebook with the mouse. On Resources, Codes, UDFs and Steps click a row (Ctrl-click, Shift-click or drag for more, Ctrl+A for all) and press Ctrl+C.</li>
         <li>The numbers in brackets on the tabs show how many there are. The tab you pick is remembered.</li>
         <li><b>View &gt; Show on Bottom</b> picks what the bottom panel shows (Activity Details, Resource Usage, Resource Spreadsheet, Comments, Changes or Schedule Check), or <b>None</b> to hide it, like P6. You can also click its tabs; drag its top edge to resize it.</li>
       </ul>`,
@@ -164,7 +172,7 @@ const SECTIONS: Section[] = [
         <li><b>Bars by</b> sets each bar's period (Week by default) separately from the Gantt zoom. <b>Fit project</b> squeezes the whole project into view and keeps weekly bars.</li>
         <li><b>Manning</b> shows people instead of hours: hours ÷ the hours one person works per week (e.g. 70 for 7 × 10 h days). Longer bars are scaled, so a monthly bar shows the average crew for that month.</li>
         <li>Hours are spread evenly over each assignment's working time on the activity's calendar (no resource curves).</li>
-        <li>The <b>Resource Spreadsheet</b> tab shows the same numbers as a table: one row per resource, one column per week, month, quarter or year (<b>Units per</b>), with a Total column and a <b>Total labor</b> row. Show <b>Total</b>, <b>Actual</b> or <b>Remaining</b> units, or tick <b>Manning</b> for people (labour only; the hours per person-week come from the Resource Usage tab, and Total becomes the peak). The column with the data date is highlighted. <b>Export to Excel</b> saves it as an .xlsx.</li>
+        <li>The <b>Resource Spreadsheet</b> tab shows the same numbers as a table: one row per resource, one column per week, month, quarter or year (<b>Units per</b>), with a Total column and a <b>Total labor</b> row. Show <b>Total</b>, <b>Actual</b> or <b>Remaining</b> units, or tick <b>Manning</b> for people (labour only; Total becomes the peak) and type the hours one person works per week, month, quarter or year; each is kept separately. The column with the data date is highlighted. Click rows (Ctrl-click, Shift-click, drag, or Ctrl+A for all) and press Ctrl+C to paste them into a spreadsheet, or <b>Export to Excel</b> to save an .xlsx.</li>
       </ul>`,
   },
   {
@@ -214,7 +222,7 @@ const SECTIONS: Section[] = [
     title: "Good to know",
     html: `
       <ul>
-        <li><b>Private:</b> files are read inside this browser window. Nothing is uploaded or sent anywhere, and the viewer works offline. The Excel export is built in the browser too.</li>
+        <li><b>Private:</b> files are read inside this browser window. Nothing is uploaded, and the viewer works offline. The Excel export is built in the browser too. The only network request is the update check, which asks GitHub for the latest version number and sends nothing about you or your schedule.</li>
         <li><b>Read-only:</b> the viewer never changes a .xer file. Make schedule changes in P6.</li>
         <li><b>Durations</b> are shown as P6 stored them when the schedule was last scheduled, converted with each activity's calendar. If your P6 is set to a fixed hours-per-day instead, day counts can differ for 10 or 12-hour calendars.</li>
         <li><b>Driving relationships</b> are worked out from the dates P6 exports, using each activity's working calendar.</li>
@@ -260,8 +268,11 @@ export function showShortcuts(): void {
     ["Enter or double-click", "Expand / collapse WBS"],
     ["Double-click a relationship", "Go to that activity"],
     ["Ctrl+Mouse wheel on Gantt", "Zoom timescale"],
+    ["Drag left / right on the Gantt", "Make the timescale's periods narrower / wider"],
     ["Double-click a row in the Gantt", "Zoom to that bar"],
-    ["Right-click an activity", "Comment, copy, Trace Logic, zoom to bar"],
+    ["Right-click the grid or Gantt", "Comment, copy, Trace Logic, expand / collapse, columns, bar labels..."],
+    ["Drag a column header", "Move the column"],
+    ["Click, Ctrl/Shift-click in a bottom table", "Select rows to copy (Ctrl+A for all)"],
     ["Right-click a column header", "Sort, filter or hide that column"],
     ["Funnel on a column header", "Filter or sort that column"],
     ["Esc", "Close a dialog, menu or the Find box; clear a filter box"],
@@ -269,11 +280,23 @@ export function showShortcuts(): void {
   modal("Keyboard Shortcuts", `<table class="hg-keys">${rows.map(([k, v]) => `<tr><td><b>${k}</b></td><td>${v}</td></tr>`).join("")}</table>`);
 }
 
+/** Help > What's New: CHANGELOG.md in brief, newest first. */
+export function showWhatsNew(): void {
+  const html = parseChangelog(changelog)
+    .map(
+      (r) =>
+        `<h4>${esc(r.version)} <span>${esc(r.date)}${r.version === __APP_VERSION__ ? " (this version)" : ""}</span></h4>` +
+        r.sections.map(([name, items]) => (name ? `<b>${esc(name)}</b>` : "") + `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`).join(""),
+    )
+    .join("");
+  modal("What's New", `<div class="wn">${html}</div>`, "modal-wide");
+}
+
 export function showAbout(): void {
   modal(
     "About XER Viewer",
     `<p><b>XER Viewer</b> ${__APP_VERSION__}: a read-only viewer for Primavera P6 .xer files, in a single HTML file.</p>
-     <p>Your file is read inside this browser window. Nothing is uploaded or sent anywhere.</p>
+     <p>Your file is read inside this browser window and never uploaded.</p>
      <p>Source and downloads: <b>github.com/bhaules/ClaudeXerViewer</b></p>`,
   );
 }

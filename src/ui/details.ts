@@ -4,6 +4,7 @@ import { changeDetails, codeColumnKey, udfColumnKey, type Column, type ColumnCon
 import { formatDate, formatNumber, formatPercent } from "../xer/format";
 import type { Activity, Schedule, Wbs } from "../xer/model";
 import { el, esc } from "./dom";
+import { TableSelect } from "./table-select";
 
 export type DetailsTab = "general" | "relationships" | "resources" | "codes" | "udfs" | "notebook" | "steps";
 
@@ -52,6 +53,7 @@ export class DetailsPanel {
       this.host.setTab(t.dataset.t as DetailsTab);
       this.render();
     });
+    new TableSelect(this.body, ".dtable", false);
     this.root = el("div", "details", [this.strip, this.body, this.relations]);
     this.render();
   }

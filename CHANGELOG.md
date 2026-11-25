@@ -3,6 +3,36 @@
 All notable changes to XER Viewer. Each version is a GitHub release with the viewer
 attached as `xer-viewer-v<version>.html` (`xer-viewer.html` before 0.6.0).
 
+## 0.9.0 (2026-11-25)
+
+### Added
+- **Update check.** When the viewer starts it asks GitHub whether there is a newer version
+  and offers the download. It sends nothing about your schedule, stays quiet offline, and
+  **Help > Check at Startup** turns it off. Saved copies you send to people don't check.
+- **Refresh warning.** The browser asks before a refresh or close that would lose an opened
+  .xer or baseline.
+- **What's New.** **Help > What's New** lists each version's changes in brief.
+- **Drag columns.** Drag a column header left or right to move the column.
+- **Stretch the timescale.** Drag left or right on the Gantt or its timescale to make
+  periods narrower or wider; weeks stay weeks. **View > Timescale** fixes the periods.
+- **Copy from the bottom tables.** Click, Ctrl-click, Shift-click or drag to select rows in
+  the Resource Spreadsheet, Resources, Codes, UDFs and Steps, then Ctrl+C.
+- **Manning hours.** The Resource Spreadsheet has its own hours per person, set separately
+  for week, month, quarter and year.
+- **Right-click menus.** The grid and the Gantt both offer Expand All, Collapse All,
+  Columns, Relationship Lines, Bar Labels, Timescale, Zoom to Fit and Go to Data Date.
+- **Reapply Filter.** **Filter > Reapply Filter** drops rows shown from outside the filter.
+
+### Changed
+- **Jumping past a filter.** Jumping to an activity the filter hides now shows it until the
+  filter is reapplied, like P6, with a red note in the status bar.
+- **Starts expanded.** Schedules open with every WBS expanded.
+- **Select text.** Text on the Activity Details General and Notebook tabs can be
+  selected with the mouse.
+
+### Fixed
+- **Resource Spreadsheet.** The Type column is no longer cut off.
+
 ## 0.8.0 (2026-11-19)
 
 ### Added

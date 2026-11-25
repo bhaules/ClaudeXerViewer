@@ -2,7 +2,7 @@
 
 Read-only viewer for Primavera P6 `.xer` exports that looks and behaves like
 P6's Activities view. Ships as ONE self-contained HTML file that recipients
-open in any browser: no install, no server, no network. Schedule data never
+open in any browser: no install, no server, no network (except the update check). Schedule data never
 leaves the user's machine. The goal is to replace sending PDF printouts.
 
 Successor to the PySide6 app in `../xerViewer` (reference for features and
@@ -23,7 +23,10 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
 ## Stack
 - TypeScript (strict), no UI framework. Vite + vite-plugin-singlefile.
 - No runtime dependencies without asking. No CDN links, no fetch() of remote
-  URLs: the build must work offline from file://.
+  URLs: the build must work offline from file://. The one exception, asked for by the
+  user, is the update check (`src/ui/update.ts`: GitHub's latest release, silent on
+  failure, at most every 4 h, never in saved copies or dev; offers only links under this
+  repo's releases). It must never send anything about the schedule or the user.
 - Light theme only (P6 has no dark mode).
 
 ## Layout
@@ -63,6 +66,9 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
   `src/xer/text.ts`: notebook / step HTML -> plain text (never render file HTML).
   `src/ui/details.ts`: Activity Details tab (General, Relationships, Resources, Codes, UDFs,
   Notebook, Steps; General reuses column `text`). `src/ui/spreadsheet.ts`: Resource Spreadsheet.
+- `src/xer/changelog.ts`: CHANGELOG.md in brief for Help > What's New (bullets need a bold
+  lead and a first sentence that stands alone), version comparison. `src/ui/table-select.ts`:
+  row selection + Ctrl+C for bottom-panel tables (the app's copy handler asks it first).
 - `src/xer/comments.ts`: review comment model (targets, merge, save format; no DOM).
   `src/ui/comments.ts`: comment dialogs and the Comments tab
 - `src/features.ts`: feature flags; check them, don't delete features
@@ -230,7 +236,15 @@ under the mouse on mousedown, or double-click stops working.
   hours on the activity's calendar (P6 sign: negative = later). Baseline bars are thin
   yellow bars under the current bars, which move up 3 px while a baseline is loaded.
   "Any change" excludes progress-only changes. Opening another .xer keeps the baseline.
-- Right-click popups (`popupMenu`) support submenus, like the menu bar.
+- Right-click popups (`popupMenu`) support submenus, like the menu bar. Grid and Gantt share
+  `rowMenu` (index -1 = empty area); `ganttOptions` is shared with the View menu.
+- Dragging on the Gantt or its header stretches the timescale (`startStretch`) and holds the
+  tiers (`held`) until the next zoom; View > Timescale fixes them. Periods too narrow to
+  label are labelled every nth (`periods`). Dragging a grid header moves its column.
+- Jumping (`goTo`) to an activity the filter hides adds it to `extras`: shown until
+  `applyFilter()` runs without `keepExtras` (P6 behaviour). `view.filter` includes extras.
+- Files open fully expanded (`FEATURES.defaultExpandLevel`). `beforeunload` warns when a
+  refresh would lose an opened .xer or baseline (not a saved copy's own) or comments.
 
 ## Review comments
 - Never in the .xer and never imported into P6: they live in the saved HTML file.

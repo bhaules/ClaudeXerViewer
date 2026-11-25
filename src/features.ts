@@ -43,6 +43,8 @@ export const FEATURES = {
   scheduleCheck: true,
   /** View > Bar Labels on the Gantt. */
   barLabels: true,
-  /** WBS levels expanded when a file opens. */
-  defaultExpandLevel: 2,
+  /** Check GitHub for a newer version at startup, and Help > Check for Updates. */
+  updateCheck: true,
+  /** WBS levels expanded when a file opens (Infinity = all). */
+  defaultExpandLevel: Infinity,
 } as const;

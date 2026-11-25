@@ -13,8 +13,10 @@ async function start(): Promise<void> {
     await app.load(embedded.name, embedded.bytes, readEmbeddedComments());
     const baseline = await readEmbeddedBaseline();
     if (baseline) await app.setBaseline(baseline.name, baseline.bytes);
-    return;
+    app.markSavedCopy();
+    return; // a saved copy is a snapshot someone was sent: it doesn't check for updates
   }
+  app.checkForUpdate();
   // Dev convenience: /?file=/tests/fixtures/sample.xer
   const file = import.meta.env.DEV ? new URLSearchParams(location.search).get("file") : null;
   if (file) {

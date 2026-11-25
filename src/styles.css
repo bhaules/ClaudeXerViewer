@@ -441,7 +441,11 @@ body {
 .dtab:hover { background: #e6eef7; }
 .dtab.active { background: #fff; border-color: var(--border-light); margin-bottom: -1px; padding-bottom: 3px; font-weight: 600; }
 .details-off .dtabs, .details-off .dbody { display: none !important; }
-.dbody { flex: 1; overflow: auto; min-height: 0; background: #fff; }
+.dbody { flex: 1; overflow: auto; min-height: 0; background: #fff; user-select: text; outline: none; }
+.dbody .dtable { user-select: none; cursor: default; }
+.dtable tr.sel td { background: var(--row-select); }
+.dtable tbody tr:hover td { background: #eef4fb; }
+.dtable tbody tr.sel:hover td { background: var(--row-select); }
 .dgen { display: flex; flex-wrap: wrap; gap: 6px 24px; padding: 8px 12px; align-items: flex-start; }
 .dgen section { min-width: 260px; }
 .dgen h4, .dnote h4 { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: #2f5b8f; }
@@ -477,8 +481,28 @@ body {
 .ss-table .ss-f1, .ss-table .ss-f2 { position: sticky; z-index: 1; background: #fff; }
 .ss-table th.ss-f1, .ss-table th.ss-f2 { z-index: 3; background: linear-gradient(#fafafa, #e9e9e9); }
 .ss-table .ss-f1 { left: 0; width: 120px; min-width: 120px; max-width: 120px; }
-.ss-table .ss-f2 { left: 133px; width: 200px; min-width: 200px; max-width: 200px; box-shadow: inset -1px 0 0 var(--border); }
+.ss-table .ss-f2 { left: var(--ss-f1, 120px); width: 200px; min-width: 200px; max-width: 200px; box-shadow: inset -1px 0 0 var(--border); }
 .ss-table td.ss-tot { font-weight: 600; background: #f6f6f6; }
 .ss-table .ss-dd { background: #fff7d6; }
 .ss-table th.ss-dd { background: linear-gradient(#fff3c4, #ffe79a); }
 .ss-table tr.ss-total td { font-weight: 600; background: #eef2f7; border-top: 1px solid var(--border); }
+
+/* ---------- Dragging columns and the timescale ---------- */
+.col-ghost { position: fixed; z-index: 96; padding: 3px 10px; background: #fff; border: 1px solid #3c7fc4; box-shadow: 2px 3px 8px rgba(0, 0, 0, .25); font-weight: 600; pointer-events: none; }
+.col-drop { position: absolute; top: 0; width: 3px; height: 38px; background: #2f6fc0; z-index: 5; pointer-events: none; }
+.hrow { position: relative; }
+.hcell.moving { opacity: .5; }
+body.moving-col, body.moving-col * { cursor: grabbing !important; }
+.gantt-head { cursor: ew-resize; }
+body.stretching, body.stretching * { cursor: ew-resize !important; }
+
+/* Row selection in the Resource Spreadsheet (over its own cell backgrounds). */
+.ss-body { outline: none; }
+.ss-body .ss-table tbody tr.sel td { background: var(--row-select); }
+.statusbar .left.alert { color: #c0110c; font-weight: 700; }
+.upd-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.upd-foot a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+.wn h4 { margin: 12px 0 2px; font-size: 13px; font-weight: 700; }
+.wn h4 span { color: var(--muted); font-weight: 400; }
+.wn ul { margin: 2px 0 4px; padding-left: 18px; }
+.wn { max-height: 60vh; overflow: auto; padding: 4px 16px 12px; }

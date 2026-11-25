@@ -28,7 +28,7 @@ export function popupMenu(items: MenuItem[], x: number, y: number): void {
   const esc_ = (e: KeyboardEvent) => {
     if (e.key === "Escape") close();
   };
-  const open = (list: MenuItem[], left: number, top: number, depth: number) => {
+  const open = (list: MenuItem[], left: number, top: number, depth: number, parent?: DOMRect) => {
     menus.splice(depth).forEach((m) => m.remove());
     const menu = el("div", "menu popup");
     for (const item of list) {
@@ -46,7 +46,7 @@ export function popupMenu(items: MenuItem[], x: number, y: number): void {
         if (item.items && enabled) {
           row.classList.add("open");
           const rr = row.getBoundingClientRect();
-          open(item.items(), rr.right - 2, rr.top - 3, depth + 1);
+          open(item.items(), rr.right - 2, rr.top - 3, depth + 1, rr);
         } else {
           menus.splice(depth + 1).forEach((m) => m.remove());
         }
@@ -60,6 +60,8 @@ export function popupMenu(items: MenuItem[], x: number, y: number): void {
     }
     document.body.append(menu);
     const r = menu.getBoundingClientRect();
+    // A submenu with no room on the right opens on the left of its parent.
+    if (parent && left + r.width > window.innerWidth) left = parent.left - r.width + 2;
     menu.style.left = `${Math.max(0, Math.min(left, window.innerWidth - r.width - 2))}px`;
     menu.style.top = `${Math.max(0, Math.min(top, window.innerHeight - r.height - 2))}px`;
     menus.push(menu);

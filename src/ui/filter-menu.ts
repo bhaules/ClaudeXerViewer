@@ -40,6 +40,8 @@ export interface FilterMenuHost {
   /** The selected activity, the starting point for Trace Logic. */
   selected(): Activity | null;
   setTrace(t: TraceSpec | null): void;
+  /** Filter > Reapply Filter: drops rows that were only shown by jumping to them. */
+  onReapply(): void;
 }
 
 /** Trace Logic choices, shared with the grid row menu. */
@@ -139,6 +141,7 @@ export function filterMenuItems(h: FilterMenuHost): MenuItem[] {
     },
     "-",
     { label: "Filter Row", key: "Ctrl+Shift+F", checked: h.filterRowShown, enabled: h.loaded, action: h.toggleFilterRow },
+    { label: "Reapply Filter", enabled: h.active, action: h.onReapply },
     { label: "Clear Filters", enabled: h.active, action: h.onClear },
   ];
 }

@@ -35,7 +35,7 @@ import { buildActivitiesXlsx, buildTableXlsx, XLSX_TYPE, type TableSheet } from 
 import { el, esc, modal, splitter } from "./dom";
 import { openColumnFilter } from "./column-filter";
 import { openColumnsDialog } from "./columns-dialog";
-import { Gantt } from "./gantt";
+import { Gantt, TIMESCALES, type Timescale } from "./gantt";
 import { Grid } from "./grid";
 import { askReviewerName, CommentsPanel, describeTarget, editCommentDialog } from "./comments";
 import { MenuBar, popupMenu, type MenuItem } from "./menu";
@@ -45,11 +45,13 @@ import { filterMenuItems, traceMenuItems } from "./filter-menu";
 import { ChangesPanel } from "./changes";
 import { DetailsPanel, type DetailsTab } from "./details";
 import { HealthPanel } from "./health";
-import { ResourceSpreadsheet } from "./spreadsheet";
+import { DEFAULT_SPREADSHEET, ResourceSpreadsheet, type SpreadsheetSettings } from "./spreadsheet";
+import { selectedTableRows } from "./table-select";
+import { checkForUpdateAtStart, checkForUpdateNow } from "./update";
 import { checkSchedule, type CheckResult } from "../xer/health";
 import { changesSheets, checkSheets, infoSheet } from "../xer/reports";
 import { showCalendars } from "./calendars";
-import { showAbout, showShortcuts, showUserGuide } from "./help";
+import { showAbout, showShortcuts, showUserGuide, showWhatsNew } from "./help";
 import { Search } from "./search";
 import { ROW_HEIGHT, wbsColors } from "./theme";
 import { Toolbar, type ToolItem } from "./toolbar";
@@ -71,6 +73,11 @@ interface Prefs {
   detailsTab: DetailsTab;
   /** View > Bar Labels. */
   barLabels: BarLabels;
+  /** View > Timescale. */
+  timescale: Timescale;
+  /** Help > Check for Updates at Startup. */
+  updateCheck: boolean;
+  spreadsheet: SpreadsheetSettings;
   histogram: HistogramSettings;
   /** Name shown on review comments made in this browser. */
   reviewer: string;
@@ -107,6 +114,9 @@ const DEFAULT_PREFS: Prefs = {
   bottomTab: "details",
   detailsTab: "relationships",
   barLabels: "none",
+  timescale: "auto",
+  updateCheck: true,
+  spreadsheet: DEFAULT_SPREADSHEET,
   histogram: DEFAULT_HISTOGRAM,
   reviewer: "",
 };
@@ -116,6 +126,8 @@ function loadPrefs(): Prefs {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<Prefs>;
     const prefs = { ...DEFAULT_PREFS, ...saved };
     prefs.histogram = { ...DEFAULT_HISTOGRAM, ...saved.histogram };
+    prefs.spreadsheet = { ...DEFAULT_SPREADSHEET, ...saved.spreadsheet };
+    if (!TIMESCALES.some(([t]) => t === prefs.timescale)) prefs.timescale = "auto";
     // Before 0.8 the first bottom tab was just Relationships; it's inside Activity Details now.
     if ((prefs.bottomTab as string) === "relationships") prefs.bottomTab = "details";
     // UDF and activity code columns depend on the file; keep them for files that have them.
@@ -178,6 +190,13 @@ export class App {
   private filterState: FilterState = emptyFilter();
   private compiled: CompiledFilter = { test: null, errors: new Set() };
   private filterTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The filter without `extras`. */
+  private baseFilter: ((a: Activity) => boolean) | null = null;
+  /** Activities outside the filter shown because the user jumped to them, until it is reapplied (like P6). */
+  private extras = new Set<Activity>();
+  /** In a saved viewer file: what it contains, which a refresh brings back. */
+  private ownBytes: Uint8Array | null = null;
+  private ownBaseline: Uint8Array | null = null;
   /** All review comments, including deleted ones (kept so merges can't revive them). */
   private comments: ReviewComment[] = [];
   /** targetKey -> [open, done] counts of live comments. */
@@ -239,6 +258,7 @@ export class App {
       onScroll: (top) => (this.gantt.scrollTop = top),
       commentBadge: (r) => (FEATURES.comments ? this.commentIndex.get(rowKey(r)) ?? null : null),
       onRowMenu: (i, x, y) => this.rowMenu(i, x, y),
+      onMoveColumn: (key, before) => this.moveColumn(key, before),
     });
 
     this.gantt = new Gantt({
@@ -253,6 +273,7 @@ export class App {
         this.select(i);
         this.zoomToRow(i);
       },
+      onContextMenu: (i, x, y) => this.rowMenu(i, x, y),
       onScroll: (top) => (this.grid.scrollTop = top),
       baseline: (row) => {
         const cmp = this.cmp;
@@ -270,6 +291,8 @@ export class App {
         if (this.resourceTabShown()) this.resources.draw();
       },
     });
+
+    this.gantt.setTimescale(this.prefs.timescale);
 
     const unit = () => this.view.ctx.unit;
     const nav = (a: Activity) => this.goTo(a);
@@ -375,7 +398,11 @@ export class App {
       dataDate: () => this.schedule?.projects[0]?.dataDate ?? null,
       hoursPerWeek: () => this.prefs.histogram.hoursPerWeek,
       onExport: (sheets, what) => void this.exportTables(sheets, "resource usage", what),
-    });
+      onSettingsChange: (s) => {
+        this.prefs.spreadsheet = s;
+        this.savePrefs();
+      },
+    }, this.prefs.spreadsheet);
     const ssRow = el("div", "brow", [this.spreadsheet.root]);
 
     this.health = new HealthPanel({
@@ -469,9 +496,10 @@ export class App {
     this.installKeys();
     this.installDrop();
     this.installCopy();
-    // Comments only persist when saved into the HTML file: warn before they're lost.
+    // Refreshing or closing loses an opened .xer (the browser can't reopen it by itself) and
+    // unsaved comments: warn first. The browser words the question.
     window.addEventListener("beforeunload", (e) => {
-      if (!this.commentsDirty) return;
+      if (!this.commentsDirty && !this.losesFiles()) return;
       e.preventDefault();
       e.returnValue = ""; // older browsers need this to show the prompt
     });
@@ -479,6 +507,23 @@ export class App {
   }
 
   private dragStart = 0;
+
+  /** This page is a saved copy whose own schedule (and baseline) is now open. */
+  markSavedCopy(): void {
+    this.ownBytes = this.fileBytes;
+    this.ownBaseline = this.baselineFile?.bytes ?? null;
+  }
+
+  /** True when a refresh would lose the open schedule or baseline. */
+  private losesFiles(): boolean {
+    if (!this.schedule) return false;
+    return this.fileBytes !== this.ownBytes || (this.baselineFile !== null && this.baselineFile.bytes !== this.ownBaseline);
+  }
+
+  /** At startup, if it's on. Not in the dev server, which is always ahead of the releases. */
+  checkForUpdate(): void {
+    if (FEATURES.updateCheck && this.prefs.updateCheck && !import.meta.env.DEV) void checkForUpdateAtStart();
+  }
 
   // ---------- Loading ----------
 
@@ -621,6 +666,7 @@ export class App {
     const row = this.rows[i];
     if (!row) return;
     this.selected = row.kind === "wbs" ? row.wbs : row.act;
+    window.getSelection()?.removeAllRanges(); // so Ctrl+C copies this row, not old text
     this.grid.updateSelection();
     this.toolbar.refresh();
     this.grid.scrollToIndex(i);
@@ -661,9 +707,11 @@ export class App {
 
   /** Expands the activity's WBS, selects it and scrolls it into the middle of the view. */
   private goTo(a: Activity): void {
-    if (this.view.filter && !this.view.filter(a)) {
-      this.setStatus(`${a.code} is hidden by the current filter. Clear Filters to see it.`);
-      return;
+    // Like P6: an activity the filter hides is shown anyway, until the filter is reapplied.
+    const hidden = this.view.filter !== null && !this.view.filter(a);
+    if (hidden) {
+      this.extras.add(a);
+      this.setViewFilter();
     }
     revealActivity(this.view.expanded, a);
     this.rebuild();
@@ -672,6 +720,9 @@ export class App {
     this.grid.scrollToIndex(i, true);
     this.select(i);
     this.gantt.reveal(a);
+    if (hidden || this.extras.has(a)) {
+      this.setStatus(`${a.code} is outside the current filter. It's shown until the filter is reapplied.`, true);
+    }
   }
 
   /** Zooms the Gantt so the row's bar fills the middle of the chart. */
@@ -789,7 +840,7 @@ export class App {
               }
               this.savePrefs();
               // Duration filters are typed in the displayed unit, so they change meaning.
-              if (this.compiled.test) this.applyFilter();
+              if (this.compiled.test) this.applyFilter(true);
               this.grid.render();
               this.preds.render();
               this.succs.render();
@@ -868,39 +919,8 @@ export class App {
 
     if (FEATURES.gantt) {
       items.push("-");
-      if (FEATURES.ganttRelationships) {
-        const modes: [RelLines, string][] = [["none", "None"], ["driving", "Driving Only"], ["all", "All"]];
-        items.push({
-          label: "Relationship Lines",
-          items: () =>
-            modes.map(([m, label]) => ({
-              label,
-              checked: () => this.prefs.relLines === m,
-              action: () => {
-                this.prefs.relLines = m;
-                this.savePrefs();
-                this.updateRelLines();
-                this.gantt.draw();
-              },
-            })),
-        });
-      }
-      if (FEATURES.barLabels) {
-        items.push({
-          label: "Bar Labels",
-          items: () =>
-            BAR_LABELS.map(([m, label]) => ({
-              label,
-              checked: () => this.prefs.barLabels === m,
-              action: () => {
-                this.prefs.barLabels = m;
-                this.savePrefs();
-                this.gantt.draw();
-              },
-            })),
-        });
-      }
       items.push(
+        ...this.ganttOptions(),
         {
           label: "Zoom",
           enabled: loaded,
@@ -924,6 +944,37 @@ export class App {
         },
       );
     }
+    return items;
+  }
+
+  /** Relationship Lines, Bar Labels and Timescale: on the View menu and the right-click menus. */
+  private ganttOptions(): MenuItem[] {
+    const choice = <T>(label: string, options: [T, string][], get: () => T, set: (v: T) => void): MenuItem => ({
+      label,
+      items: () =>
+        options.map(([v, text]) => ({
+          label: text,
+          checked: () => get() === v,
+          action: () => {
+            set(v);
+            this.savePrefs();
+            this.gantt.draw();
+          },
+        })),
+    });
+    const items: MenuItem[] = [];
+    if (FEATURES.ganttRelationships) {
+      const modes: [RelLines, string][] = [["none", "None"], ["driving", "Driving Only"], ["all", "All"]];
+      items.push(choice("Relationship Lines", modes, () => this.prefs.relLines, (m) => {
+        this.prefs.relLines = m;
+        this.updateRelLines();
+      }));
+    }
+    if (FEATURES.barLabels) items.push(choice("Bar Labels", BAR_LABELS, () => this.prefs.barLabels, (m) => (this.prefs.barLabels = m)));
+    items.push(choice("Timescale", TIMESCALES, () => this.prefs.timescale, (t) => {
+      this.prefs.timescale = t;
+      this.gantt.setTimescale(t);
+    }));
     return items;
   }
 
@@ -1008,6 +1059,7 @@ export class App {
       comparison: () => FEATURES.baselineCompare && this.cmp !== null,
       selected: () => (FEATURES.traceLogic && this.selected && isActivity(this.selected) ? this.selected : null),
       setTrace: (t) => this.setTrace(t),
+      onReapply: () => this.applyFilter(),
     });
   }
 
@@ -1015,7 +1067,22 @@ export class App {
     return [
       { label: "User Guide", key: "F1", action: () => showUserGuide() },
       { label: "Keyboard Shortcuts", action: () => showShortcuts() },
+      { label: "What's New", action: () => showWhatsNew() },
       "-",
+      ...(FEATURES.updateCheck
+        ? [
+            { label: "Check for Updates...", action: () => void checkForUpdateNow() },
+            {
+              label: "Check at Startup",
+              checked: () => this.prefs.updateCheck,
+              action: () => {
+                this.prefs.updateCheck = !this.prefs.updateCheck;
+                this.savePrefs();
+              },
+            },
+            "-" as const,
+          ]
+        : []),
       { label: "About XER Viewer", action: () => showAbout() },
     ];
   }
@@ -1030,6 +1097,15 @@ export class App {
     });
   }
 
+  /** Dragging a header: column `key` goes before `before` (null: last). */
+  private moveColumn(key: string, before: string | null): void {
+    const keys = this.columns().map((c) => c.key).filter((k) => k !== key);
+    const at = before === null ? keys.length : keys.indexOf(before);
+    if (at < 0) return;
+    keys.splice(at, 0, key);
+    this.setColumns(keys);
+  }
+
   /** Shows these columns, in this order. */
   private setColumns(keys: string[]): void {
     // Keep saved UDF and code columns this file doesn't have, so they come back for files that do.
@@ -1041,7 +1117,7 @@ export class App {
     for (const k of [...this.filterState.columns.keys()]) if (!keys.includes(k)) this.filterState.columns.delete(k);
     for (const k of [...this.filterState.values.keys()]) if (!keys.includes(k)) this.filterState.values.delete(k);
     this.grid.syncFilterValues();
-    this.applyFilter();
+    this.applyFilter(true);
   }
 
   /** Right-click on a column header: sort, filter or hide that column. */
@@ -1107,9 +1183,36 @@ export class App {
     ];
   }
 
+  /** Right-click in the grid or the Gantt; `i` is -1 on an empty area. */
   private rowMenu(i: number, x: number, y: number): void {
+    const s = this.schedule;
+    if (!s) return;
+    const items: MenuItem[] = [];
     const row = this.rows[i];
-    if (!row) return;
+    if (row) items.push(...this.rowItems(row, i), "-");
+    items.push(
+      { label: "Expand All", action: () => this.setExpanded(expandedAll(s)) },
+      { label: "Collapse All", action: () => this.setExpanded(new Set()) },
+      "-",
+    );
+    if (FEATURES.columnChooser) items.push({ label: "Columns...", action: () => this.openColumnsDialog() });
+    if (FEATURES.gantt && this.prefs.showGantt) {
+      items.push(
+        ...this.ganttOptions(),
+        { label: "Zoom to Fit", action: () => this.gantt.fit() },
+        {
+          label: "Go to Data Date",
+          enabled: () => !!s.projects[0]?.dataDate,
+          action: () => this.gantt.scrollToDate(s.projects[0].dataDate!),
+        },
+      );
+    }
+    if (this.view.filter) items.push("-", { label: "Clear Filters", action: () => this.clearFilters() });
+    popupMenu(items, x, y);
+  }
+
+  /** The right-click items about the row itself. */
+  private rowItems(row: GridRow, i: number): MenuItem[] {
     const item = row.kind === "wbs" ? row.wbs : row.act;
     const items: MenuItem[] = [];
     const sep = () => items.length && items[items.length - 1] !== "-" && items.push("-");
@@ -1134,7 +1237,7 @@ export class App {
       sep();
       items.push({ label: this.view.expanded.has(row.wbs.id) ? "Collapse" : "Expand", action: () => this.toggle(i) });
     }
-    if (items.length) popupMenu(items, x, y);
+    return items;
   }
 
   /** Asks for the reviewer's name if we don't have one (or `force`). Returns it, or null if cancelled. */
@@ -1309,7 +1412,7 @@ export class App {
       this.setBottomTab(tab);
     } else {
       this.savePrefs();
-      this.applyFilter(); // the resource filter only applies while its tab is on screen
+      this.applyFilter(true); // the resource filter only applies while its tab is on screen
     }
   }
 
@@ -1319,7 +1422,7 @@ export class App {
     this.rebuild();
     const i = this.rowIndex.get(w);
     if (i === undefined) {
-      this.setStatus(`WBS ${w.fullCode} is hidden by the current filter.`);
+      this.setStatus(`WBS ${w.fullCode} is hidden by the current filter.`, true);
       return;
     }
     this.grid.scrollToIndex(i, true);
@@ -1329,7 +1432,7 @@ export class App {
   // ---------- Filters ----------
 
   /** Recompiles the filter, re-totals WBS rows from what passes, and redraws. */
-  private applyFilter(): void {
+  private applyFilter(keepExtras = false): void {
     clearTimeout(this.filterTimer);
     const s = this.schedule;
     if (!s) return;
@@ -1339,12 +1442,16 @@ export class App {
     const base = this.compiled.test;
     const byResource = this.resourceTabShown() ? this.resources.activityFilter() : null;
     const test = base && byResource ? (a: Activity) => base(a) && byResource(a) : base ?? byResource;
-    this.view.filter = test;
-    applyRollups(s.roots, test ?? undefined);
+    this.baseFilter = test;
+    if (!keepExtras || !test) {
+      this.extras.clear();
+      if (this.status.classList.contains("alert")) this.setStatus(""); // the note about a row outside the filter
+    }
+    this.setViewFilter();
     this.rebuildKeepingSelection();
     this.grid.updateFilterErrors();
     const shown = test ? s.activities.reduce((n, a) => n + (test(a) ? 1 : 0), 0) : s.activities.length;
-    this.grid.setEmptyMessage(test && shown === 0 ? "No activities match the current filters." : null);
+    this.grid.setEmptyMessage(test && shown === 0 && !this.extras.size ? "No activities match the current filters." : null);
     const notes: string[] = [];
     if (byResource) notes.push(`resource: ${this.resources.selectionLabel()}`);
     if (this.filterState.trace) notes.push(`trace: ${describeTrace(this.filterState.trace)}`);
@@ -1353,6 +1460,14 @@ export class App {
     if (this.prefs.showRelations && this.prefs.bottomTab === "check") this.health.render();
     this.filterStatus(test ? shown : null, notes);
     this.toolbar.refresh();
+  }
+
+  /** The filter plus any activities jumped to outside it; re-totals the WBS bands from what shows. */
+  private setViewFilter(): void {
+    const test = this.baseFilter;
+    const extras = this.extras;
+    this.view.filter = test && extras.size ? (a) => test(a) || extras.has(a) : test;
+    if (this.schedule) applyRollups(this.schedule.roots, this.view.filter ?? undefined);
   }
 
   /**
@@ -1379,7 +1494,7 @@ export class App {
     this.savePrefs();
     this.applyBottomTab();
     // The resource filter only applies while its tab is on screen.
-    this.applyFilter();
+    this.applyFilter(true);
   }
 
   private applyBottomTab(): void {
@@ -1851,17 +1966,21 @@ export class App {
 
   private copyRows(rows: GridRow[]): void {
     if (!rows.length) return;
-    const table = rowsToTable(rows, this.columns(), this.view.ctx, wbsColors);
-    this.pendingCopy = table;
-    // execCommand fires the copy event, which puts both HTML and text on the clipboard.
-    const ok = document.execCommand("copy");
-    if (this.pendingCopy) {
-      this.pendingCopy = null;
-      if (!ok) {
-        void navigator.clipboard?.writeText(table.text);
-      }
-    }
+    this.copyTable(rowsToTable(rows, this.columns(), this.view.ctx, wbsColors));
     this.copied(rows);
+  }
+
+  /** Puts a table on the clipboard, as text and HTML. */
+  private copyTable(table: CopiedTable): void {
+    this.pendingCopy = table;
+    document.execCommand("copy"); // fires the copy event below
+    if (!this.pendingCopy) return;
+    this.pendingCopy = null;
+    // The event didn't fire: use the clipboard API instead.
+    const blob = (type: string, text: string) => ({ [type]: new Blob([text], { type }) });
+    navigator.clipboard
+      ?.write([new ClipboardItem({ ...blob("text/plain", table.text), ...blob("text/html", table.html) })])
+      .catch(() => this.setStatus("The browser didn't allow copying to the clipboard.", true));
   }
 
   private copied(rows: GridRow[]): void {
@@ -1869,23 +1988,28 @@ export class App {
     this.setStatus(`Copied ${n.toLocaleString()} row${n === 1 ? "" : "s"} with the grid's columns. Paste into an email, Teams, Word or Excel.`);
   }
 
-  /** Ctrl+C on the grid (and the Edit menu, through execCommand) copies rows as a table. */
+  /** Ctrl+C: rows picked in a bottom table, else the grid's. False leaves it to the browser. */
+  private copyKey(): boolean {
+    if (!FEATURES.copyRows || !this.schedule) return false;
+    // Leave normal copying alone: text boxes, selected text, dialogs.
+    if (document.activeElement?.closest("input, textarea, select")) return false;
+    if (document.querySelector(".modal-back") || window.getSelection()?.toString()) return false;
+    const picked = selectedTableRows();
+    if (picked) {
+      this.copyTable(picked.table);
+      this.setStatus(`Copied ${picked.count.toLocaleString()} row${picked.count === 1 ? "" : "s"}. Paste into a spreadsheet or an email.`);
+      return true;
+    }
+    if (this.selectedIndex() < 0) return false;
+    this.copySelected();
+    return true;
+  }
+
   private installCopy(): void {
     document.addEventListener("copy", (e) => {
-      let table = this.pendingCopy;
+      const table = this.pendingCopy;
       this.pendingCopy = null;
-      if (!table) {
-        if (!FEATURES.copyRows || !this.schedule) return;
-        // Leave normal copying alone: text boxes, selected text, dialogs.
-        const target = e.target as HTMLElement | null;
-        if (target?.closest?.("input, textarea, select, .modal-back")) return;
-        if (window.getSelection()?.toString()) return;
-        const i = this.selectedIndex();
-        if (i < 0) return;
-        const rows = bandRows(this.rows, i);
-        table = rowsToTable(rows, this.columns(), this.view.ctx, wbsColors);
-        this.copied(rows);
-      }
+      if (!table) return;
       e.clipboardData?.setData("text/plain", table.text);
       e.clipboardData?.setData("text/html", table.html);
       e.preventDefault();
@@ -1922,6 +2046,8 @@ export class App {
       } else if (ctrl && k === "s" && FEATURES.embedSave && this.schedule) {
         e.preventDefault();
         void this.saveEmbedded();
+      } else if (ctrl && k === "c" && !e.shiftKey && !e.altKey && this.copyKey()) {
+        e.preventDefault();
       } else if (ctrl && k === "m" && FEATURES.comments && this.schedule && this.selected) {
         e.preventDefault();
         void this.addComment(this.selected);
@@ -1994,8 +2120,10 @@ export class App {
     ]);
   }
 
-  private setStatus(text: string): void {
+  /** `alert` makes it red and bold, e.g. when a row is outside the filter. */
+  private setStatus(text: string, alert = false): void {
     this.status.textContent = text;
+    this.status.classList.toggle("alert", alert);
   }
 
   private savePrefs(): void {

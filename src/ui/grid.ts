@@ -37,7 +37,9 @@ export interface GridHost {
   onActivate(index: number): void;
   /** [open, done] comment counts for a row, or null for none. */
   commentBadge(row: GridRow): [number, number] | null;
-  /** Right-click on a row (already selected by the mousedown). */
+  /** A header was dragged: put column `key` before column `before` (null: last). */
+  onMoveColumn(key: string, before: string | null): void;
+  /** Right-click on a row (already selected by the mousedown), or -1 for the empty area. */
   onRowMenu(index: number, x: number, y: number): void;
   onScroll(scrollTop: number): void;
 }
@@ -54,6 +56,8 @@ export class Grid {
   /** scrollTop last set by the scrollTop setter (syncing to the Gantt), until its echo arrives. */
   private syncedTop: number | null = null;
   private sizer: HTMLElement;
+  /** The last header press turned into a drag, so its click must not sort. */
+  private moved = false;
   private rowEls = new Map<number, { html: string; el: HTMLElement }>();
 
   constructor(private host: GridHost) {
@@ -107,10 +111,8 @@ export class Grid {
       else this.host.onSelect(i);
     });
     this.body.addEventListener("contextmenu", (e) => {
-      const i = this.rowIndexAt(e);
-      if (i < 0) return;
       e.preventDefault();
-      this.host.onRowMenu(i, e.clientX, e.clientY);
+      this.host.onRowMenu(this.rowIndexAt(e), e.clientX, e.clientY);
     });
     this.body.addEventListener("dblclick", (e) => {
       const i = this.rowIndexAt(e);
@@ -177,7 +179,9 @@ export class Grid {
 
     for (const cell of this.labels.querySelectorAll<HTMLElement>(".hcell")) {
       const key = cell.dataset.key!;
+      cell.addEventListener("mousedown", (e) => this.startMove(e, cell, key));
       cell.addEventListener("click", (e) => {
+        if (this.moved) return; // the end of a drag, not a click
         if (this.host.sortable && !(e.target as HTMLElement).classList.contains("rz")) this.host.onSort(key);
       });
       cell.querySelector<HTMLElement>(".rz")!.addEventListener("mousedown", (e) => this.startResize(e, key));
@@ -229,6 +233,63 @@ export class Grid {
       input.value = this.host.filterValue(input.dataset.key!);
     }
     this.updateFilterErrors();
+  }
+
+  /** Drag a header sideways to move its column; a line shows where it will go. Esc cancels. */
+  private startMove(e: MouseEvent, cell: HTMLElement, key: string): void {
+    this.moved = false;
+    if (e.button !== 0) return;
+    const startX = e.clientX;
+    let ghost: HTMLElement | null = null;
+    let line: HTMLElement | null = null;
+    let before: string | null = null;
+    const move = (ev: MouseEvent) => {
+      if (!(ev.buttons & 1)) return finish(false);
+      if (!ghost) {
+        if (Math.abs(ev.clientX - startX) < 6) return;
+        this.moved = true;
+        ghost = el("div", "col-ghost", [cell.firstChild?.textContent ?? ""]);
+        line = el("div", "col-drop");
+        document.body.append(ghost);
+        this.labels.append(line);
+        cell.classList.add("moving");
+        document.body.classList.add("moving-col");
+      }
+      // Near an edge, scroll towards columns that are out of view.
+      const view = this.head.getBoundingClientRect();
+      if (ev.clientX < view.left + 24) this.body.scrollLeft -= 16;
+      else if (ev.clientX > view.right - 24) this.body.scrollLeft += 16;
+      ghost.style.left = `${ev.clientX + 10}px`;
+      ghost.style.top = `${ev.clientY + 12}px`;
+      before = null;
+      let x = 0;
+      for (const c of this.labels.querySelectorAll<HTMLElement>(".hcell")) {
+        const r = c.getBoundingClientRect();
+        if (ev.clientX < r.left + r.width / 2) {
+          before = c.dataset.key!;
+          break;
+        }
+        x += r.width;
+      }
+      line!.style.left = `${Math.max(0, x - 1)}px`;
+    };
+    const finish = (drop: boolean) => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      window.removeEventListener("keydown", cancel, true);
+      document.body.classList.remove("moving-col");
+      cell.classList.remove("moving");
+      ghost?.remove();
+      line?.remove();
+      if (drop && ghost && before !== key) this.host.onMoveColumn(key, before);
+    };
+    const up = () => finish(true);
+    const cancel = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") finish(false);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    window.addEventListener("keydown", cancel, true);
   }
 
   private startResize(e: MouseEvent, key: string): void {
