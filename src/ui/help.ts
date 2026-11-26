@@ -1,5 +1,6 @@
 // Help > User Guide, Keyboard Shortcuts and About. Keep this in step with the features:
-// when you add or change something users can do, describe it here.
+// when you add or change something users can do, describe it here. Keep it short: one
+// line per thing, what to click and what it does. Details belong in tooltips and dialogs.
 import changelog from "../../CHANGELOG.md?raw";
 import { parseChangelog } from "../xer/changelog";
 import { esc, modal } from "./dom";
@@ -19,57 +20,28 @@ const SECTIONS: Section[] = [
     id: "start",
     title: "Getting started",
     html: `
-      <p>XER Viewer shows a Primavera P6 schedule (<b>.xer</b> export) the way P6's Activities view does, in any browser, with nothing to install.</p>
+      <p>XER Viewer shows a P6 <b>.xer</b> export like P6's Activities view, in your browser. Nothing is installed and nothing is uploaded.</p>
       <ul>
-        <li><b>Open a schedule:</b> <b>File &gt; Open</b> (Ctrl+O), or drag a <b>.xer</b> file onto the window.</li>
-        <li><b>Saved viewer files</b> (<b>.html</b>) open straight to their schedule when you double-click them. You can also drop one onto a blank viewer.</li>
-        <li>The <b>toolbar</b> under the menus has the everyday commands: Open, Save, Export to Excel, Expand / Collapse All, Find, the Filter menu, Clear Filters, Gantt Chart, Zoom In / Out / to Fit, Go to Data Date, Add Comment and this guide. Hover a button for its name and shortcut. <b>View &gt; Toolbar</b> hides it.</li>
-        <li>The title bar shows the project and its <b>data date</b>. The status bar shows what's selected and how many activities and relationships the file has.</li>
-        <li>Your choices (columns, widths, units, panels, histogram settings) are remembered in this browser.</li>
-        <li><b>Refreshing</b> the page closes an opened .xer, because a browser can't reopen a file by itself. It asks first (in the browser's own words) when you refresh or close the tab. Saved viewer files keep their schedule.</li>
-        <li><b>Updates:</b> you don't need to check. The viewer asks GitHub for the latest version when it opens and again every few hours while it stays open (so a pinned tab hears about it too). When there is a newer one, a blue bar under the toolbar offers <b>Download</b>, <b>What's New</b> and <b>Skip This Version</b>; × hides it until the page is reopened. The download is a new file: open it and use it instead of this one. <b>Help &gt; Notify About Updates</b> turns this off; <b>Help &gt; Check for Updates Now</b> asks straight away. <b>Help &gt; What's New</b> lists what changed in each version.</li>
+        <li><b>Open a schedule:</b> <b>File &gt; Open</b> (Ctrl+O), or drag a .xer onto the window.</li>
+        <li><b>Right-click</b> a row, the Gantt or a column header for the commands you'll use most.</li>
+        <li>Hover a toolbar button to see what it does.</li>
+        <li>Your columns and settings are remembered in this browser.</li>
+        <li>Refreshing the page closes an opened .xer, so the browser asks first.</li>
       </ul>`,
   },
   {
-    id: "navigate",
-    title: "Moving around",
+    id: "grid",
+    title: "Grid and columns",
     html: `
       <ul>
-        <li>Activities are grouped by <b>WBS</b>. Click a band's arrow, double-click it, or press → / ← to expand or collapse it.</li>
-        <li>A schedule opens with everything expanded. <b>View &gt; Expand All</b>, <b>Collapse All</b> and <b>Expand To &gt; Level n</b> open the whole tree to a level.</li>
-        <li>Move with ↑ ↓, Page Up/Down, Home and End. ← on an activity jumps up to its WBS band.</li>
-        <li>WBS bands show the summarised <b>Start</b> and <b>Finish</b>, the lowest <b>Total Float</b> and labour totals. Their <b>Original Duration</b> is the working time between the band's summarised Start and Finish, on the calendar most of its activities use (so a Christmas shutdown in the activities' calendar is left out even if the project calendar has none); <b>Remaining Duration</b> is the same from the data date (0 once everything under it is complete). They are not added up from the activities, so overlapping activities aren't counted twice. Both show in the Duration Unit, like the activities.</li>
-        <li><b>Right-click</b> a row in the grid or the Gantt (or an empty area) for comments, copy, Trace Logic, zoom, Expand / Collapse All, Columns, Relationship Lines, Bar Labels and Timescale.</li>
-        <li>The selected row is highlighted in <b>amber</b> in the grid and the Gantt, so it stands out from the blue WBS bands.</li>
-        <li>Dates follow P6: <b>A</b> after a date means actual; <b>*</b> means a constraint applies.</li>
-        <li><b>View &gt; Hide Empty WBS</b> hides bands with no activities under them.</li>
-        <li><b>View &gt; Calendars...</b> shows every calendar in the file: hours per day and week, the working times for each weekday, and the whole year on one screen with holidays (red) and days with changed hours (blue). Hover a day for its hours; ◀ ▶ change the year. It opens on the selected activity's calendar.</li>
-      </ul>`,
-  },
-  {
-    id: "columns",
-    title: "Columns and sorting",
-    html: `
-      <ul>
-        <li><b>View &gt; Columns...</b> opens the Columns dialog. Pick from <b>Available Options</b> and order them under <b>Selected Options</b>. Double-click, the arrow buttons, Ctrl/Shift-click and the filter box all work.</li>
-        <li>Available columns, grouped like P6:
-          <ul>
-            <li><b>General:</b> Activity ID and Name, Status, Activity Type, Calendar, Duration Type, Percent Complete Type, Primary and Secondary Constraint, Primary Resource, WBS Code, WBS Name, Project.</li>
-            <li><b>Activity Codes:</b> every code type the file uses, each as the code value and as its description.</li>
-            <li><b>Dates:</b> Start, Finish, Actual Start/Finish, Planned Start/Finish, Late Start/Finish, Expected Finish, constraint dates.</li>
-            <li><b>Durations:</b> Original and Remaining Duration, Total and Free Float.</li>
-            <li><b>Percent Complete:</b> Activity % Complete, Physical % Complete.</li>
-            <li><b>Units:</b> Budgeted / Actual / Remaining Labor and Nonlabor Units (WBS bands show totals).</li>
-            <li><b>Baseline:</b> BL Start, BL Finish, Start and Finish Variance, BL Original Duration, Duration Variance, BL Total Float and Change. These fill in once a baseline is loaded (see Comparing with a baseline).</li>
-            <li><b>User Defined Fields:</b> every activity UDF that has a value in the file.</li>
-          </ul>
-        </li>
-        <li>Code and UDF columns are saved by name, so a layout carries over to other files that use the same codes and UDFs.</li>
-        <li>Drag a <b>header</b> left or right to move its column (Esc cancels). Drag the <b>edge</b> of a header to resize it.</li>
-        <li>The <b>funnel</b> on each header opens that column's filter: sort buttons, a condition, and a list of the column's values to tick (see Find and filters).</li>
-        <li><b>Right-click a column header</b> to sort it, filter it, clear its filter, hide it, or open the Columns dialog.</li>
-        <li>Click a header to sort activities <b>within each WBS</b>; click again for descending, a third time to go back to the default (Start, then Activity ID). <b>View &gt; Clear Sort</b> also resets it.</li>
-        <li><b>View &gt; Duration Unit</b> shows activity durations in hours, days, weeks or months, using each activity's own calendar.</li>
+        <li>Activities are grouped by <b>WBS</b>. Double-click a band, or press → / ←, to expand or collapse it. <b>View &gt; Expand All</b> and <b>Collapse All</b> do the lot.</li>
+        <li>Dates: <b>A</b> = actual, <b>*</b> = constrained. The selected row is amber.</li>
+        <li>WBS bands show their summary dates, lowest float and totals.</li>
+        <li><b>View &gt; Columns...</b> picks the columns, including activity codes, UDFs and baseline columns.</li>
+        <li>Drag a header to move a column; drag its edge to resize it.</li>
+        <li>Click a header to sort (within each WBS). Click again for descending, a third time to reset.</li>
+        <li><b>View &gt; Duration Unit</b> shows hours, days, weeks or months.</li>
+        <li><b>View &gt; Calendars...</b> shows each calendar's work week and holidays.</li>
       </ul>`,
   },
   {
@@ -77,49 +49,12 @@ const SECTIONS: Section[] = [
     title: "Find and filters",
     html: `
       <ul>
-        <li><b>Find</b> (Ctrl+F) searches Activity IDs and names. Enter or F3 for the next match, Shift+Enter or Shift+F3 for the previous. Matches are highlighted.</li>
-        <li>The <b>Filter</b> menu (also the funnel button on the toolbar): tick <b>Not Started</b> / <b>In Progress</b> / <b>Completed</b>, <b>Critical</b>, <b>Milestones</b> or <b>With Comments</b>. <b>Active Between...</b> keeps activities that are underway at any point in a date range; <b>Look Ahead</b> sets that range from the data date (2 weeks to 3 months). Ticks show what's on.</li>
-        <li><b>Filter &gt; Filter Row</b> (Ctrl+Shift+F) shows a row of boxes under the column headers. Type under any column. Text matches anywhere (<code>=x</code> exact, <code>&lt;&gt;x</code> excludes). Numbers and dates take <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code> <code>=</code>, e.g. <code>&gt;0</code> in Remaining Labor Units or <code>&lt;01-Jul-26</code> in Finish. A plain <code>Jul-26</code> finds any date in July 2026. A red box means the filter wasn't understood. Esc clears a box.</li>
-        <li><b>Column funnel:</b> click the funnel on a column header for an Excel-style filter. Tick the values to keep (with how many activities have each; <i>(Blanks)</i> is the empty ones), search the list, type a condition (same as the filter row), or sort the column. The list only shows values left in by the other filters. A filtered column's funnel turns blue.</li>
-        <li>While anything is filtered, a yellow note in the status bar says how many activities are showing, and the toolbar's funnel button is pressed. WBS bands only show matching activities and their totals are added up from those, like P6.</li>
-        <li><b>Clear Filters</b> (Filter menu or toolbar) resets everything, including a resource selected on the Resource Usage tab. Hiding the filter row keeps what you typed; those columns' funnels stay blue.</li>
-        <li>Jumping to an activity the filter hides (from Relationships, Changes or Comments) <b>shows it anyway</b>, like P6, and the status bar says so in red. It goes when the filter changes, or with <b>Filter &gt; Reapply Filter</b>.</li>
-        <li>The <b>selected activity stays selected</b> while you filter. If it is still showing it stays where it was on screen, and when a filter that hid it is cleared, the grid scrolls back to it.</li>
-        <li>Changing the Duration Unit drops values ticked in duration columns, since they were in the old unit.</li>
-      </ul>`,
-  },
-  {
-    id: "trace",
-    title: "Trace Logic",
-    html: `
-      <p>Answers "why is this activity on this date?" by showing only the chain of activities that leads to it.</p>
-      <ul>
-        <li>Select an activity, then <b>Filter &gt; Trace Logic</b>, or right-click the activity and choose <b>Trace Logic</b>:
-          <ul>
-            <li><b>Driving Predecessors</b>: back through the relationships that drive each date, to the data date or a constraint. This is the activity's driving path.</li>
-            <li><b>Driving Successors</b>: forward through what this activity drives.</li>
-            <li><b>Driving Path (Both Ways)</b>: both of the above.</li>
-            <li><b>All Predecessors</b> / <b>All Successors</b>: every relationship, driving or not.</li>
-          </ul>
-        </li>
-        <li>The grid and Gantt show only the traced activities, with their WBS bands opened. The status bar says what is being traced. Turn on <b>View &gt; Relationship Lines</b> to see the chain on the Gantt.</li>
-        <li>It works with the other filters. <b>Filter &gt; Trace Logic &gt; Clear Trace</b> or <b>Clear Filters</b> goes back to everything.</li>
-      </ul>`,
-  },
-  {
-    id: "baseline",
-    title: "Comparing with a baseline",
-    html: `
-      <p>See what changed since an earlier version of the schedule, for example last month's update.</p>
-      <ul>
-        <li>Open the current schedule, then <b>File &gt; Compare with Baseline...</b> and pick the earlier <b>.xer</b> (or a saved viewer .html). Activities are matched by Activity ID, so it works across exports.</li>
-        <li>The grid gets <b>BL Finish</b>, <b>Finish Variance</b> and <b>Change</b> columns after Finish; more are in the Columns dialog under <b>Baseline</b>. Variance is baseline minus current in working time, like P6, so <b>-5d</b> means 5 working days later than the baseline. Hover a <b>Change</b> cell for the details.</li>
-        <li>The Gantt draws a thin ${swatch(GANTT.baseline)} yellow <b>baseline bar</b> under each bar.</li>
-        <li>The <b>Changes</b> tab at the bottom lists every changed activity with what changed: added, deleted, finish later or earlier, start moved, original duration, predecessors added, removed or with a new lag, constraints, progress, renamed, calendar and WBS. Pick a category under <b>Show</b> (with counts), click a column header to sort, and click a row to go to the activity. <b>Filter Activities</b> shows just those activities in the grid and Gantt.</li>
-        <li><b>Filter &gt; Changes vs Baseline</b> filters by the same categories. <b>Any Change</b> leaves out activities that were only progressed.</li>
-        <li><b>Export to Excel</b> on the Changes tab saves every change (including deleted activities, biggest slips first) with baseline and current dates, variances and details, plus a <b>Summary</b> sheet of counts, for monthly reports.</li>
-        <li><b>Deleted</b> activities aren't in the current schedule, so they're only listed on the Changes tab.</li>
-        <li><b>File &gt; Save Viewer with Schedule</b> saves the baseline inside the file too, so whoever you send it to sees the comparison. <b>File &gt; Remove Baseline</b> turns it off. Opening another .xer keeps the baseline and compares the new file with it.</li>
+        <li><b>Find</b> (Ctrl+F) searches IDs and names. F3 / Shift+F3 for next / previous.</li>
+        <li>The <b>Filter</b> menu (or the toolbar funnel): status, Critical, Milestones, With Comments, Active Between and Look Ahead.</li>
+        <li>The <b>funnel</b> on a column header filters it like Excel: tick values or type a condition.</li>
+        <li><b>Filter &gt; Filter Row</b> (Ctrl+Shift+F) puts a box under each header. Type text, or e.g. <code>&gt;0</code> or <code>&lt;01-Jul-26</code>.</li>
+        <li>While anything is filtered, a yellow note in the status bar says so. <b>Clear Filters</b> resets everything.</li>
+        <li><b>Trace Logic</b> (Filter menu, or right-click an activity) shows only what drives an activity, or what it drives.</li>
       </ul>`,
   },
   {
@@ -131,90 +66,80 @@ const SECTIONS: Section[] = [
         ${swatch(GANTT.actual)} Actual &nbsp;
         ${swatch(GANTT.critical)} Critical &nbsp;
         ${swatch(GANTT.remaining, "diamond")} Milestone &nbsp;
-        ${swatch(GANTT.summary, "summary")} WBS summary &nbsp;
+        ${swatch(GANTT.summary, "summary")} WBS &nbsp;
+        ${swatch(GANTT.baseline)} Baseline &nbsp;
         ${swatch(GANTT.dataDate, "line")} Data date
       </p>
       <ul>
-        <li><b>Zoom:</b> Ctrl + mouse wheel over the chart, or <b>View &gt; Zoom</b> (In, Out, Zoom to Fit). <b>View &gt; Go to Data Date</b> scrolls to the data date.</li>
-        <li><b>Stretch the timescale:</b> press on the chart or its timescale and drag left to make the periods narrower or right to make them wider. The date you grab stays put and the periods don't change (weeks stay weeks), until you zoom again. <b>View &gt; Timescale</b> fixes the periods at every zoom.</li>
-        <li><b>View &gt; Bar Labels</b> writes the Activity Name, Activity ID, both, the Finish date, or the Start and Finish dates next to each bar, as on a printout.</li>
-        <li><b>Double-click a row in the Gantt</b> to zoom to its bar, like P6: the bar is centred and fills about half the chart (milestones get a two-week window). <b>View &gt; Zoom &gt; Zoom to Selected</b> and <b>Zoom to Bar</b> on the row's right-click menu do the same.</li>
-        <li><b>Relationship lines</b> (<b>View &gt; Relationship Lines</b>): <b>Driving Only</b> (default) draws the relationships that drive each activity's dates; <b>All</b> adds the rest as dashed lines; <b>None</b> hides them. Lines are red when both ends are critical, and drawn thicker for the selected activity.</li>
-        <li>Jumping to an activity (Find, a relationship, a comment) also scrolls the chart to its bar.</li>
-        <li><b>View &gt; Gantt Chart</b> hides or shows it; drag the divider to change its width.</li>
+        <li><b>Zoom:</b> Ctrl + mouse wheel, or <b>View &gt; Zoom</b>. Double-click a row to zoom to its bar.</li>
+        <li>Drag left or right on the chart to make the weeks (or months) narrower or wider.</li>
+        <li><b>View &gt; Relationship Lines</b>: Driving Only, All or None.</li>
+        <li><b>View &gt; Bar Labels</b> writes names or dates next to the bars.</li>
       </ul>`,
   },
   {
-    id: "relationships",
-    title: "Activity Details",
+    id: "bottom",
+    title: "Bottom panel",
     html: `
-      <p>The <b>Activity Details</b> tab at the bottom shows the selected activity, like P6's, on these tabs:</p>
       <ul>
-        <li><b>General:</b> IDs, type, status, WBS, calendar, durations, float, all its dates, constraints and units, and (with a baseline loaded) its baseline dates, variance and what changed. Select a WBS band to see its summary.</li>
-        <li><b>Relationships:</b> its <b>Predecessors</b> and <b>Successors</b> with relationship type (FS/SS/FF/SF), lag, whether it is <b>Driving</b>, dates, float and criticality. Double-click a row to jump to that activity; click a column header to sort.</li>
-        <li><b>Resources:</b> the resources assigned, with budgeted, actual, remaining and at-completion units and their dates.</li>
-        <li><b>Codes:</b> every activity code assigned, with its description. <b>UDFs:</b> every user defined field with a value.</li>
-        <li><b>Notebook:</b> its notebook notes by topic, as plain text. <b>Steps:</b> its steps with weight, % complete and description, and the weighted total.</li>
-        <li><b>Copying:</b> select text on General and Notebook with the mouse. On Resources, Codes, UDFs and Steps click a row (Ctrl-click, Shift-click or drag for more, Ctrl+A for all) and press Ctrl+C.</li>
-        <li>The numbers in brackets on the tabs show how many there are. The tab you pick is remembered.</li>
-        <li><b>View &gt; Show on Bottom</b> picks what the bottom panel shows (Activity Details, Resource Usage, Resource Spreadsheet, Comments, Changes or Schedule Check), or <b>None</b> to hide it, like P6. You can also click its tabs; drag its top edge to resize it.</li>
+        <li><b>Activity Details:</b> the selected activity's general info, relationships, resources, codes, UDFs, notebook and steps. Double-click a relationship to go to that activity.</li>
+        <li><b>Resource Usage:</b> a histogram under the Gantt. Click a resource, or Ctrl-click several. <b>Manning</b> shows people instead of hours.</li>
+        <li><b>Resource Spreadsheet:</b> the same numbers as a table by week, month, quarter or year.</li>
+        <li><b>Comments</b>, <b>Changes</b> and <b>Schedule Check</b>: see below.</li>
+        <li>Click rows in a bottom table and press Ctrl+C to copy them.</li>
+        <li><b>View &gt; Show on Bottom</b> picks the tab, or hides the panel.</li>
       </ul>`,
   },
   {
-    id: "resources",
-    title: "Resource Usage (histogram)",
+    id: "baseline",
+    title: "Comparing with a baseline",
     html: `
       <ul>
-        <li>The <b>Resource Usage</b> tab lists the resources with budgeted, actual and remaining units, and draws a histogram lined up under the Gantt (it follows the Gantt's zoom and scrolling).</li>
-        <li>Click a column header in the resource list to sort it (again for descending, a third time for the file's order). Type in the boxes under the headers to filter it: text matches anywhere (<code>=x</code> exact, <code>&lt;&gt;x</code> excludes) and units take <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code> <code>=</code>, e.g. <code>&gt;20000</code>. <b>All Resources</b> then means the resources still listed.</li>
-        <li>Click a resource to see it alone: actual in blue, remaining in green. Ctrl-click to add more; <b>All Resources</b> stacks every resource in its own colour. Hover a bar for the numbers.</li>
-        <li>Selecting resources also shows only the activities that use them. Untick <b>Show only activities that use the selected resources</b> to keep everything in view.</li>
-        <li><b>Bars by</b> sets each bar's period (Week by default) separately from the Gantt zoom. <b>Fit project</b> squeezes the whole project into view and keeps weekly bars.</li>
-        <li><b>Manning</b> shows people instead of hours: hours ÷ the hours one person works per week (e.g. 70 for 7 × 10 h days). Longer bars are scaled, so a monthly bar shows the average crew for that month.</li>
-        <li>Hours are spread evenly over each assignment's working time on the activity's calendar (no resource curves).</li>
-        <li>The <b>Resource Spreadsheet</b> tab shows the same numbers as a table: one row per resource, one column per week, month, quarter or year (<b>Units per</b>), with a Total column and a <b>Total labor</b> row. Show <b>Total</b>, <b>Actual</b> or <b>Remaining</b> units, or tick <b>Manning</b> for people (labour only; Total becomes the peak) and type the hours one person works per week, month, quarter or year; each is kept separately. The column with the data date is highlighted. Click rows (Ctrl-click, Shift-click, drag, or Ctrl+A for all) and press Ctrl+C to paste them into a spreadsheet, or <b>Export to Excel</b> to save an .xlsx.</li>
+        <li><b>File &gt; Compare with Baseline...</b> and pick an earlier .xer, e.g. last month's. Activities are matched by ID.</li>
+        <li>You get baseline columns (BL Finish, Finish Variance, Change) and yellow baseline bars. Variance is like P6: <b>-5d</b> = 5 days later.</li>
+        <li>The <b>Changes</b> tab lists every added, deleted, moved or re-linked activity. Click one to go to it.</li>
+        <li><b>Filter &gt; Changes vs Baseline</b> shows one kind of change.</li>
       </ul>`,
   },
   {
     id: "check",
     title: "Schedule Check",
     html: `
-      <p><b>Review &gt; Schedule Check</b> (or the <b>Schedule Check</b> tab at the bottom) runs a health check like the DCMA 14-point assessment, on incomplete activities, leaving out Level of Effort and WBS summary activities:</p>
       <ul>
-        <li>1 <b>Missing logic</b> (no predecessor or successor), 2 <b>Leads</b>, 3 <b>Lags</b>, 4 <b>Relationship types</b> (at least 90% FS), 5 <b>Hard constraints</b>, 6 <b>High float</b> and 8 <b>High duration</b> (over 44 working days), 7 <b>Negative float</b>, 9 <b>Invalid dates</b> (actuals after the data date, forecasts before it), 10 <b>Resources</b> (tasks with none), 11 <b>Missed activities</b>, 13 <b>Critical path length index</b> and 14 <b>Baseline execution index</b>. Point 12 (critical path test) needs P6 to reschedule, so it isn't included. Start-to-finish relationships and the critical activities are listed too.</li>
-        <li>Each check shows the count, what it's out of, the value, DCMA's target and <b>Pass</b> or <b>Fail</b>.</li>
-        <li>11 and 14 compare with the baseline when one is loaded (File &gt; Compare with Baseline), otherwise with P6's planned dates.</li>
-        <li><b>Click a check</b> to show only the activities it flags (their WBS bands are opened); the status bar says which check is filtering. <b>Show All Activities</b> or <b>Clear Filters</b> goes back.</li>
-        <li><b>Export to Excel</b> saves the results and every flagged activity.</li>
+        <li><b>Review &gt; Schedule Check</b> runs a DCMA 14-point style health check (logic, leads, lags, constraints, float, durations, dates...) with Pass / Fail for each.</li>
+        <li>Click a check to see the activities it flags.</li>
       </ul>`,
   },
   {
     id: "comments",
     title: "Review comments",
     html: `
-      <p><b>Reviewing a schedule someone sent you</b></p>
-      <ol>
-        <li>Right-click an activity or WBS band and choose <b>Add Comment</b> (or select it and press Ctrl+M). <b>Review &gt; Add General Comment</b> is for the schedule as a whole. You'll be asked your name the first time.</li>
-        <li>Pick a type (Comment, Question, Change request or Error) and type your comment. Rows with comments get an orange marker.</li>
-        <li>Save with <b>File &gt; Save Viewer with Schedule</b> (Ctrl+S). The file is named after you; send it back.</li>
-      </ol>
-      <p><b>Collecting comments</b></p>
-      <ol>
-        <li>Open your copy of the schedule, then drop all the returned files onto it at once (or <b>Review &gt; Import Reviewers' Files</b>). Importing the same file twice doesn't duplicate anything.</li>
-        <li>The <b>Comments</b> tab lists every comment. Click one to jump to its activity; tick <b>Done</b> once you've made the change in P6; filter by Open / Done or by reviewer. The <b>Status</b> column is filled in automatically: <b>Moved since</b> (the activity's dates have changed since the comment was written), <b>Not in this schedule</b> (the activity was deleted or renumbered), or who marked it done and when.</li>
-        <li><b>Filter &gt; With Comments</b> shows only the activities that have them.</li>
-      </ol>
-      <p>Comments are never written into the .xer or imported into P6. If the window is closed without saving, the browser warns you, and unsaved comments come back the next time the schedule is opened in the same browser.</p>`,
+      <ul>
+        <li><b>Reviewing:</b> right-click a row and choose <b>Add Comment</b> (Ctrl+M). Save with Ctrl+S and send the file back.</li>
+        <li><b>Collecting:</b> drop all the returned files onto your copy at once. The <b>Comments</b> tab lists them; tick <b>Done</b> as you deal with them.</li>
+        <li><b>Moved since</b> means the activity's dates have changed since the comment was written.</li>
+        <li>Comments stay in the viewer file. They never go into the .xer or P6.</li>
+      </ul>`,
   },
   {
     id: "share",
-    title: "Sending a schedule",
+    title: "Sharing and Excel",
     html: `
       <ul>
-        <li><b>File &gt; Save Viewer with Schedule</b> (Ctrl+S) saves one <b>.html</b> file with the schedule (and any comments) inside. Send it instead of a PDF: whoever receives it double-clicks it and the schedule opens, with nothing to install.</li>
-        <li>The schedule is compressed, so the file is usually much smaller than the .xer.</li>
-        <li><b>Edit &gt; Copy</b> (Ctrl+C) copies the selected activity, or a selected WBS band with every row shown under it, as a table with the grid's columns. Paste it into an email, Teams, Word or Excel: WBS bands keep their colours. <b>Edit &gt; Copy All Rows as Shown</b> copies everything on screen, e.g. a filtered list or a traced driving path.</li>
-        <li><b>File &gt; Export to Excel</b> saves the grid as an <b>.xlsx</b>: <b>Rows as Shown</b> (what's expanded now) or <b>All Rows</b> (every WBS expanded, Ctrl+E). It has the columns you're showing, in order, with the current sort and filters. Dates and numbers are real Excel values, WBS bands keep their colours and become Excel row groups, and the header row is frozen with AutoFilter on. A second sheet, <b>Export Info</b>, records the file, data date, sort and filters. Chrome and Edge ask where to save; other browsers put it in Downloads. The A (actual) and * (constraint) date markers aren't carried across.</li>
+        <li><b>File &gt; Save Viewer with Schedule</b> (Ctrl+S) saves one .html file with the schedule inside. Send it instead of a PDF; it opens with a double-click.</li>
+        <li><b>Edit &gt; Copy</b> (Ctrl+C) copies the selected row, or a WBS band with its rows, for email, Teams or Excel.</li>
+        <li><b>File &gt; Export to Excel</b> saves the grid with your columns, sort and filters. Ctrl+E exports every row.</li>
+        <li>The Changes, Schedule Check and Resource Spreadsheet tabs each have their own <b>Export to Excel</b>.</li>
+      </ul>`,
+  },
+  {
+    id: "updates",
+    title: "Updates",
+    html: `
+      <ul>
+        <li>When a new version is out, a blue bar appears under the toolbar.</li>
+        <li>To update: download it, save it in place of your current file with the same name, and press F5. Your settings carry over.</li>
+        <li><b>Help &gt; What's New</b> lists the changes. <b>Help &gt; Notify About Updates</b> turns the bar off.</li>
       </ul>`,
   },
   {
@@ -222,11 +147,9 @@ const SECTIONS: Section[] = [
     title: "Good to know",
     html: `
       <ul>
-        <li><b>Private:</b> files are read inside this browser window. Nothing is uploaded, and the viewer works offline. The Excel export is built in the browser too. The only network request is the update check, which asks GitHub for the latest version number and sends nothing about you or your schedule.</li>
-        <li><b>Read-only:</b> the viewer never changes a .xer file. Make schedule changes in P6.</li>
-        <li><b>Durations</b> are shown as P6 stored them when the schedule was last scheduled, converted with each activity's calendar. If your P6 is set to a fixed hours-per-day instead, day counts can differ for 10 or 12-hour calendars.</li>
-        <li><b>Driving relationships</b> are worked out from the dates P6 exports, using each activity's working calendar.</li>
-        <li>Large schedules (tens of thousands of activities) are fine: only the rows on screen are drawn.</li>
+        <li><b>Private:</b> your schedule never leaves this computer. The update check is the only network request, and it sends nothing about you or your schedule.</li>
+        <li><b>Read-only:</b> the viewer never changes a .xer. Make changes in P6.</li>
+        <li>Durations and float are converted with each activity's calendar, as P6 last scheduled them.</li>
       </ul>`,
   },
 ];
@@ -252,32 +175,35 @@ export function showUserGuide(): void {
   });
 }
 
+/** Help > Keyboard Shortcuts: keys first, then the mouse. */
 export function showShortcuts(): void {
-  const rows: [string, string][] = [
-    ["F1", "User guide"],
-    ["Ctrl+O", "Open a .xer (or a saved viewer .html)"],
-    ["Ctrl+S", "Save viewer with schedule (and comments)"],
+  const keys: [string, string][] = [
+    ["F1", "User Guide"],
+    ["Ctrl+O", "Open"],
+    ["Ctrl+S", "Save viewer with schedule"],
     ["Ctrl+E", "Export all rows to Excel"],
-    ["Ctrl+C", "Copy the selected row (a WBS band: with the rows under it) as a table"],
-    ["Ctrl+F", "Find activity by ID or name"],
+    ["Ctrl+C", "Copy the selected row(s)"],
+    ["Ctrl+F", "Find"],
     ["F3 / Shift+F3", "Find next / previous"],
-    ["Ctrl+Shift+F", "Show / hide the filter row under the headers"],
-    ["Ctrl+M or right-click a row", "Add a review comment"],
-    ["↑ ↓ PgUp PgDn Home End", "Move selection"],
-    ["→ / ←", "Expand / collapse WBS (← on an activity jumps to its WBS)"],
-    ["Enter or double-click", "Expand / collapse WBS"],
-    ["Double-click a relationship", "Go to that activity"],
-    ["Ctrl+Mouse wheel on Gantt", "Zoom timescale"],
-    ["Drag left / right on the Gantt", "Make the timescale's periods narrower / wider"],
-    ["Double-click a row in the Gantt", "Zoom to that bar"],
-    ["Right-click the grid or Gantt", "Comment, copy, Trace Logic, expand / collapse, columns, bar labels..."],
-    ["Drag a column header", "Move the column"],
-    ["Click, Ctrl/Shift-click in a bottom table", "Select rows to copy (Ctrl+A for all)"],
-    ["Right-click a column header", "Sort, filter or hide that column"],
-    ["Funnel on a column header", "Filter or sort that column"],
-    ["Esc", "Close a dialog, menu or the Find box; clear a filter box"],
+    ["Ctrl+Shift+F", "Filter row on / off"],
+    ["Ctrl+M", "Add a comment"],
+    ["→ / ←", "Expand / collapse a WBS"],
+    ["Esc", "Close a dialog, menu or Find"],
   ];
-  modal("Keyboard Shortcuts", `<table class="hg-keys">${rows.map(([k, v]) => `<tr><td><b>${k}</b></td><td>${v}</td></tr>`).join("")}</table>`);
+  const mouse: [string, string][] = [
+    ["Right-click", "Menu for a row, the Gantt or a column header"],
+    ["Double-click a WBS band", "Expand / collapse it"],
+    ["Double-click a relationship", "Go to that activity"],
+    ["Double-click a row in the Gantt", "Zoom to its bar"],
+    ["Ctrl + wheel on the Gantt", "Zoom"],
+    ["Drag on the Gantt", "Make the periods narrower / wider"],
+    ["Drag a column header", "Move the column"],
+  ];
+  const rows = (list: [string, string][]) => list.map(([k, v]) => `<tr><td><b>${k}</b></td><td>${v}</td></tr>`).join("");
+  modal(
+    "Keyboard Shortcuts",
+    `<table class="hg-keys">${rows(keys)}<tr><th colspan="2">Mouse</th></tr>${rows(mouse)}</table>`,
+  );
 }
 
 /** Help > What's New: CHANGELOG.md in brief, newest first. */

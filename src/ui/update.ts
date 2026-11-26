@@ -97,13 +97,15 @@ function showBar(r: Release): void {
     a.title = tip;
     return a;
   };
+  const file = pageFileName();
+  const target = file ? `<b>${esc(file)}</b>` : "this file";
   const download = link(
     `Download ${r.version}`,
     r.download,
     "btn primary",
-    "Downloads the new viewer as a new file: open it and use it instead of this one. Your columns and settings carry over in this browser.",
+    `Save the download in place of ${file ?? "this file"}, keeping that name, then press F5 in this tab. ` +
+      "A pinned tab keeps working, and your columns and settings carry over.",
   );
-  download.addEventListener("click", () => setTimeout(hideUpdateBar));
   const skip = el("button", "btn", ["Skip This Version"]);
   skip.title = "Don't mention this version again";
   skip.addEventListener("click", () => {
@@ -118,16 +120,30 @@ function showBar(r: Release): void {
   });
   const text = el("span", "upd-text");
   text.innerHTML = `<b>XER Viewer ${esc(r.version)}</b> is available. You have ${esc(__APP_VERSION__)}.`;
+  const how = el("span", "upd-how");
+  how.innerHTML = `To update: download it, save it in place of ${target} (same name), then press <b>F5</b> here.`;
   b.replaceChildren(
     el("span", "upd-icon", ["↑"]),
     text,
     download,
     link("What's New", r.page, "btn", "The release notes on GitHub"),
     skip,
+    how,
     el("span", "upd-gap"),
     close,
   );
   b.classList.remove("hidden");
+}
+
+/** Name of the .html file this page was opened from, or null when it wasn't opened from disk. */
+function pageFileName(): string | null {
+  if (location.protocol !== "file:") return null;
+  try {
+    const name = decodeURIComponent(location.pathname.split("/").pop() ?? "");
+    return /\.html?$/i.test(name) ? name : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- Checking ----------

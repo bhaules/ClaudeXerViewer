@@ -7,6 +7,10 @@ asks GitHub whether there is a newer version when it opens and every few hours w
 stays open, and shows a bar with the download when there is one (turn it off with **Help >
 Notify About Updates**); that is its only network request.
 
+**Updating:** keep the viewer in one folder under one name (e.g. `XER Viewer.html`) and pin
+that file in Chrome. When the bar offers a new version, save the download in place of that
+file with the same name and press F5.
+
 ## Sharing a schedule (instead of a PDF)
 
 1. Open `xer-viewer-v<version>.html` (from the Releases page, or `dist/` after a build)

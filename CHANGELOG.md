@@ -3,6 +3,15 @@
 All notable changes to XER Viewer. Each version is a GitHub release with the viewer
 attached as `xer-viewer-v<version>.html` (`xer-viewer.html` before 0.6.0).
 
+## 0.9.2 (2026-11-26)
+
+### Changed
+- **How to update.** The update bar says how: save the download in place of the file you
+  opened (it names it), keeping the name, then press F5. A pinned tab keeps working. The
+  bar stays up after Download so the steps are still there.
+- **Shorter help.** The User Guide and Keyboard Shortcuts are cut down to the essentials:
+  one line per thing, what to click and what it does.
+
 ## 0.9.1 (2026-11-26)
 
 ### Changed

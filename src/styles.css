@@ -278,6 +278,8 @@ body {
 .hg-summary { width: 22px; height: 5px; }
 .hg-line { width: 0; height: 12px; border-left: 2px dashed var(--c); background: none; vertical-align: -2px; }
 .hg-keys td { padding: 3px 18px 3px 0; }
+.hg-keys td:first-child { white-space: nowrap; }
+.hg-keys th { text-align: left; padding: 14px 0 4px; border-bottom: 1px solid #e3e3e3; }
 .welcome .welcome-help { display: inline-block; margin-top: 10px; color: #1f5fbf; }
 
 /* ---------- Find dialog ---------- */
@@ -506,7 +508,9 @@ body.stretching, body.stretching * { cursor: ew-resize !important; }
   background: #e5f1fb; border-bottom: 1px solid #9cc3ea; color: #1b3d5e; white-space: nowrap; overflow: hidden;
 }
 .update-bar .upd-icon { font-weight: 700; color: #2a6fb4; }
-.update-bar .upd-text { overflow: hidden; text-overflow: ellipsis; }
+.update-bar .upd-text { flex: none; }
+/* The how-to wraps onto a second line in a narrow window rather than losing its end. */
+.update-bar .upd-how { flex: 1 1 220px; min-width: 0; white-space: normal; margin-left: 4px; line-height: 1.25; }
 .update-bar .btn { height: 22px; padding: 0 10px; }
 .update-bar a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .update-bar .upd-gap { flex: 1; }
