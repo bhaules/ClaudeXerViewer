@@ -3,6 +3,14 @@
 All notable changes to XER Viewer. Each version is a GitHub release with the viewer
 attached as `xer-viewer-v<version>.html` (`xer-viewer.html` before 0.6.0).
 
+## 0.9.1 (2026-11-26)
+
+### Changed
+- **Update notification.** A newer version is announced in a blue bar under the toolbar
+  instead of a popup, with Download, What's New and Skip This Version. The viewer checks
+  when it opens and again every few hours while it stays open, so a pinned tab finds out
+  too. **Help > Notify About Updates** turns it off.
+
 ## 0.9.0 (2026-11-25)
 
 ### Added

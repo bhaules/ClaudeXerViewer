@@ -27,7 +27,7 @@ const SECTIONS: Section[] = [
         <li>The title bar shows the project and its <b>data date</b>. The status bar shows what's selected and how many activities and relationships the file has.</li>
         <li>Your choices (columns, widths, units, panels, histogram settings) are remembered in this browser.</li>
         <li><b>Refreshing</b> the page closes an opened .xer, because a browser can't reopen a file by itself. It asks first (in the browser's own words) when you refresh or close the tab. Saved viewer files keep their schedule.</li>
-        <li><b>Updates:</b> when the viewer starts it checks GitHub for a newer version and offers the download. <b>Help &gt; Check at Startup</b> turns that off; <b>Help &gt; Check for Updates</b> checks now. <b>Help &gt; What's New</b> lists what changed in each version.</li>
+        <li><b>Updates:</b> you don't need to check. The viewer asks GitHub for the latest version when it opens and again every few hours while it stays open (so a pinned tab hears about it too). When there is a newer one, a blue bar under the toolbar offers <b>Download</b>, <b>What's New</b> and <b>Skip This Version</b>; × hides it until the page is reopened. The download is a new file: open it and use it instead of this one. <b>Help &gt; Notify About Updates</b> turns this off; <b>Help &gt; Check for Updates Now</b> asks straight away. <b>Help &gt; What's New</b> lists what changed in each version.</li>
       </ul>`,
   },
   {

@@ -25,8 +25,9 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
 - No runtime dependencies without asking. No CDN links, no fetch() of remote
   URLs: the build must work offline from file://. The one exception, asked for by the
   user, is the update check (`src/ui/update.ts`: GitHub's latest release, silent on
-  failure, at most every 4 h, never in saved copies or dev; offers only links under this
-  repo's releases). It must never send anything about the schedule or the user.
+  failure, asked at most every 4 h per browser (the open page looks every 30 min and on
+  tab focus, reusing the saved answer), never in saved copies or dev; a newer version shows
+  a bar under the toolbar, not a popup; offers only links under this repo's releases). It must never send anything about the schedule or the user.
 - Light theme only (P6 has no dark mode).
 
 ## Layout

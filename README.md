@@ -2,9 +2,10 @@
 
 A read-only viewer for Primavera P6 `.xer` files that looks and works like P6's
 Activities view. It's a single HTML file, so it opens in any browser with
-nothing to install. The schedule is read inside the browser and never uploaded. At
-startup it asks GitHub whether there is a newer version (turn it off with **Help >
-Check at Startup**); that is its only network request.
+nothing to install. The schedule is read inside the browser and never uploaded. It
+asks GitHub whether there is a newer version when it opens and every few hours while it
+stays open, and shows a bar with the download when there is one (turn it off with **Help >
+Notify About Updates**); that is its only network request.
 
 ## Sharing a schedule (instead of a PDF)
 

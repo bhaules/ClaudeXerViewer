@@ -47,7 +47,7 @@ import { DetailsPanel, type DetailsTab } from "./details";
 import { HealthPanel } from "./health";
 import { DEFAULT_SPREADSHEET, ResourceSpreadsheet, type SpreadsheetSettings } from "./spreadsheet";
 import { selectedTableRows } from "./table-select";
-import { checkForUpdateAtStart, checkForUpdateNow } from "./update";
+import { checkForUpdateNow, hideUpdateBar, startUpdateChecks, updateBar } from "./update";
 import { checkSchedule, type CheckResult } from "../xer/health";
 import { changesSheets, checkSheets, infoSheet } from "../xer/reports";
 import { showCalendars } from "./calendars";
@@ -75,7 +75,7 @@ interface Prefs {
   barLabels: BarLabels;
   /** View > Timescale. */
   timescale: Timescale;
-  /** Help > Check for Updates at Startup. */
+  /** Help > Notify About Updates. */
   updateCheck: boolean;
   spreadsheet: SpreadsheetSettings;
   histogram: HistogramSettings;
@@ -485,6 +485,7 @@ export class App {
     mount.append(
       this.menu.root,
       this.toolbar.root,
+      updateBar(),
       this.workspace,
       this.welcome,
       el("div", "statusbar", [this.status, this.statusFilter, this.statusRight]),
@@ -520,9 +521,14 @@ export class App {
     return this.fileBytes !== this.ownBytes || (this.baselineFile !== null && this.baselineFile.bytes !== this.ownBaseline);
   }
 
-  /** At startup, if it's on. Not in the dev server, which is always ahead of the releases. */
+  /**
+   * Checks for a newer version now, and again every so often while the page stays open, if
+   * it's on. Not in the dev server, which is always ahead of the releases.
+   */
   checkForUpdate(): void {
-    if (FEATURES.updateCheck && this.prefs.updateCheck && !import.meta.env.DEV) void checkForUpdateAtStart();
+    if (FEATURES.updateCheck && this.prefs.updateCheck && !import.meta.env.DEV) {
+      startUpdateChecks(() => this.prefs.updateCheck);
+    }
   }
 
   // ---------- Loading ----------
@@ -1071,15 +1077,17 @@ export class App {
       "-",
       ...(FEATURES.updateCheck
         ? [
-            { label: "Check for Updates...", action: () => void checkForUpdateNow() },
             {
-              label: "Check at Startup",
+              label: "Notify About Updates",
               checked: () => this.prefs.updateCheck,
               action: () => {
                 this.prefs.updateCheck = !this.prefs.updateCheck;
                 this.savePrefs();
+                if (this.prefs.updateCheck) this.checkForUpdate();
+                else hideUpdateBar();
               },
             },
+            { label: "Check for Updates Now", action: () => void checkForUpdateNow() },
             "-" as const,
           ]
         : []),

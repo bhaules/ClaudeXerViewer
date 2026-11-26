@@ -43,7 +43,7 @@ export const FEATURES = {
   scheduleCheck: true,
   /** View > Bar Labels on the Gantt. */
   barLabels: true,
-  /** Check GitHub for a newer version at startup, and Help > Check for Updates. */
+  /** Check GitHub for a newer version (at startup and while open), and Help > Check for Updates Now. */
   updateCheck: true,
   /** WBS levels expanded when a file opens (Infinity = all). */
   defaultExpandLevel: Infinity,
