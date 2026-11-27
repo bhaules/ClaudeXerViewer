@@ -3,6 +3,17 @@
 All notable changes to XER Viewer. Each version is a GitHub release with the viewer
 attached as `xer-viewer-v<version>.html` (`xer-viewer.html` before 0.6.0).
 
+## 0.10.0 (2026-11-27)
+
+### Added
+- **Group by activity code.** **View > Group By** shows bands by an activity code (for
+  example Discipline or Area) instead of WBS, like P6's Group and Sort. Each band rolls up
+  its dates, float and units, and filters, sorting, copy and Excel export work as with WBS.
+  Right-click a code column's header to group by it. The choice is remembered.
+- **Replies to comments.** **Reply** on the Comments tab answers a comment, for example to
+  say what was changed. Replies travel in the saved file like comments, and replies made
+  by different people in different files are all kept when the files are imported.
+
 ## 0.9.3 (2026-11-27)
 
 ### Fixed

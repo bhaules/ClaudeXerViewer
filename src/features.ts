@@ -45,6 +45,8 @@ export const FEATURES = {
   barLabels: true,
   /** Check GitHub for a newer version (at startup and while open), and Help > Check for Updates Now. */
   updateCheck: true,
+  /** View > Group By: bands by activity code instead of WBS. */
+  groupBy: true,
   /** WBS levels expanded when a file opens (Infinity = all). */
   defaultExpandLevel: Infinity,
 } as const;

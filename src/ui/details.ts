@@ -128,7 +128,8 @@ export class DetailsPanel {
       this.fields(WBS_GENERAL, (c) => c.wbsText(w, ctx)) +
       `<tr><th>Activities</th><td>${w.activityCount.toLocaleString()}</td></tr>` +
       `<tr><th>Calendar (for durations)</th><td>${esc(w.calendar?.name ?? w.project?.calendar.name ?? "")}</td></tr>`;
-    return `<div class="dgen"><section><h4>WBS ${esc(w.fullCode)}</h4><table class="dform">${rows}</table></section></div>`;
+    const title = w.group ? `${w.group.label} ${w.code || "(blank)"}` : `WBS ${w.fullCode}`;
+    return `<div class="dgen"><section><h4>${esc(title)}</h4><table class="dform">${rows}</table></section></div>`;
   }
 
   private resources(a: Activity): string {

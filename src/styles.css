@@ -240,7 +240,16 @@ body {
 .cm-table .cm-actions { white-space: nowrap; }
 .cm-table .cm-actions .btn { height: 20px; padding: 0 8px; margin-right: 4px; font-size: 11px; }
 .cm-table tr.cm-isdone td { color: #8a8a8a; }
-.cm-table tr.cm-isdone .cm-text { text-decoration: line-through; text-decoration-color: #bbb; }
+.cm-table tr.cm-isdone .cm-main { text-decoration: line-through; text-decoration-color: #bbb; }
+/* Replies sit under the comment, indented with a rule, oldest first. */
+.cm-reply { margin: 4px 0 0 10px; padding: 2px 0 2px 8px; border-left: 2px solid #c9d8ea; }
+.cm-rhead { color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 4px; }
+.cm-rhead b { color: var(--text); }
+.cm-rdel { margin-left: auto; border: 0; background: none; color: #999; cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; visibility: hidden; }
+.cm-reply:hover .cm-rdel { visibility: visible; }
+.cm-rdel:hover { color: #c0110c; }
+.dlg-quote { margin: 0 0 10px; padding: 6px 8px; background: #f5f7fa; border-left: 3px solid #c9d8ea; white-space: pre-wrap; max-height: 140px; overflow: auto; }
+.dlg-quote-by { color: var(--muted); font-size: 11px; margin-bottom: 2px; white-space: normal; }
 .cm-type { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 11px; background: #e6e6e6; }
 .cm-type.t-Question { background: #dbeafe; }
 .cm-type.t-Changerequest { background: #fde7c7; }

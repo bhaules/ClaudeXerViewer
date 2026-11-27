@@ -4,6 +4,7 @@ import { loadSchedule } from "../src/xer";
 import {
   changedSince,
   extractCommentsFromHtml,
+  liveReplies,
   mergeComments,
   newCommentId,
   parseComments,
@@ -11,6 +12,7 @@ import {
   serializeComments,
   snapshotOf,
   targetFor,
+  type CommentReply,
   type ReviewComment,
 } from "../src/xer/comments";
 
@@ -88,5 +90,46 @@ describe("review comments", () => {
     const json = JSON.stringify({ format: "xer-viewer-comments", version: 1, comments: [good, { id: 5 }, null, { ...good, status: "maybe" }] });
     expect(parseComments(json)).toEqual([good]);
     expect(parseComments("not json")).toEqual([]);
+  });
+});
+
+describe("replies", () => {
+  const reply = (id: string, author: string, created: number, over: Partial<CommentReply> = {}): CommentReply => ({
+    id,
+    author,
+    text: `reply ${id}`,
+    created,
+    updated: created,
+    ...over,
+  });
+
+  it("keeps replies made in different files, and the comment's own latest edit", () => {
+    const base = comment({ id: "c1" });
+    // The scheduler replied in their copy; the reviewer edited the comment and replied in theirs.
+    const mine = { ...base, replies: [reply("r1", "Scheduler", 2000)] };
+    const theirs = { ...base, text: "Edited", updated: 3000, replies: [reply("r2", "Jane", 2500)] };
+    const r = mergeComments([mine], [theirs]);
+    expect(r.updated).toBe(1);
+    expect(r.comments[0].text).toBe("Edited");
+    expect(r.comments[0].replies?.map((x) => x.id)).toEqual(["r1", "r2"]);
+    // Merging the same file again changes nothing.
+    expect(mergeComments(r.comments, [theirs])).toMatchObject({ added: 0, updated: 0 });
+  });
+
+  it("a deleted reply stays deleted when an older copy is merged", () => {
+    const old = comment({ id: "c2", replies: [reply("r1", "Jane", 2000)] });
+    const now = { ...old, replies: [reply("r1", "Jane", 2000, { deleted: true, updated: 4000 })] };
+    const r = mergeComments([now], [old]);
+    expect(liveReplies(r.comments[0])).toEqual([]);
+    expect(r.updated).toBe(0);
+  });
+
+  it("round-trips through the saved file, dropping malformed replies", () => {
+    const c = comment({ replies: [reply("r1", "Sam", 2000, { text: "</script> done <b>now</b>" })] });
+    const html = `<script id="xer-comments" type="application/json">${serializeComments([c])}</script>`;
+    expect(extractCommentsFromHtml(html)).toEqual([c]);
+    const bad = { ...c, replies: [reply("r1", "Sam", 2000), { id: 3 }, null, { ...reply("r3", "X", 1), created: "yesterday" }] };
+    const json = JSON.stringify({ format: "xer-viewer-comments", version: 1, comments: [bad] });
+    expect(parseComments(json)[0].replies?.map((x) => x.id)).toEqual(["r1"]);
   });
 });

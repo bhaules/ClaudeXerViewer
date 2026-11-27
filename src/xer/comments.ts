@@ -36,6 +36,23 @@ export interface ReviewComment {
   snapshot?: CommentSnapshot;
   /** Kept (rather than removed) so a merge doesn't bring a deleted comment back. */
   deleted?: boolean;
+  /** Answers, oldest first. Merged one by one, so replies made in different files all survive. */
+  replies?: CommentReply[];
+}
+
+/** An answer to a comment, e.g. the scheduler saying what they changed. */
+export interface CommentReply {
+  id: string;
+  author: string;
+  text: string;
+  created: number;
+  updated: number;
+  /** Kept, like deleted comments, so a merge can't bring it back. */
+  deleted?: boolean;
+}
+
+export function liveReplies(c: ReviewComment): CommentReply[] {
+  return (c.replies ?? []).filter((r) => !r.deleted);
 }
 
 export interface CommentFile {
@@ -134,12 +151,35 @@ export function mergeComments(mine: ReviewComment[], incoming: ReviewComment[]):
     if (!have) {
       byId.set(c.id, c);
       if (!c.deleted) added++;
-    } else if (c.updated > have.updated) {
-      byId.set(c.id, c);
+      continue;
+    }
+    // The comment itself: the copy changed last. Its replies: every reply from both copies.
+    const newer = c.updated > have.updated;
+    const replies = mergeReplies(have.replies ?? [], c.replies ?? []);
+    if (newer || replies.changed) {
+      const base = newer ? c : have;
+      const merged: ReviewComment = { ...base };
+      if (replies.list.length) merged.replies = replies.list;
+      else delete merged.replies;
+      byId.set(c.id, merged);
       updated++;
     }
   }
   return { comments: [...byId.values()].sort((a, b) => a.created - b.created), added, updated };
+}
+
+/** Replies from two copies of one comment, by reply id; the copy changed last wins. */
+function mergeReplies(mine: CommentReply[], incoming: CommentReply[]): { list: CommentReply[]; changed: boolean } {
+  const byId = new Map(mine.map((r) => [r.id, r]));
+  let changed = false;
+  for (const r of incoming) {
+    const have = byId.get(r.id);
+    if (!have || r.updated > have.updated) {
+      byId.set(r.id, r);
+      changed = true;
+    }
+  }
+  return { list: [...byId.values()].sort((a, b) => a.created - b.created), changed };
 }
 
 export function liveComments(all: ReviewComment[]): ReviewComment[] {
@@ -212,6 +252,22 @@ function cleanComment(c: unknown): ReviewComment | null {
   if (s && typeof s === "object") {
     out.snapshot = { name: str(s.name) ?? "", start: str(s.start) ?? "", finish: str(s.finish) ?? "", remaining: str(s.remaining) ?? "" };
   }
+  if (x.deleted === true) out.deleted = true;
+  if (Array.isArray(x.replies)) {
+    const replies = x.replies.map(cleanReply).filter((r): r is CommentReply => r !== null);
+    if (replies.length) out.replies = replies;
+  }
+  return out;
+}
+
+function cleanReply(r: unknown): CommentReply | null {
+  if (!r || typeof r !== "object") return null;
+  const x = r as Record<string, unknown>;
+  const ok = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+  if (typeof x.id !== "string" || typeof x.author !== "string" || typeof x.text !== "string" || !ok(x.created) || !ok(x.updated)) {
+    return null;
+  }
+  const out: CommentReply = { id: x.id, author: x.author, text: x.text, created: x.created as number, updated: x.updated as number };
   if (x.deleted === true) out.deleted = true;
   return out;
 }

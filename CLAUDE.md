@@ -70,6 +70,11 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
 - `src/xer/changelog.ts`: CHANGELOG.md in brief for Help > What's New (bullets need a bold
   lead and a first sentence that stands alone), version comparison. `src/ui/table-select.ts`:
   row selection + Ctrl+C for bottom-panel tables (the app's copy handler asks it first).
+- `src/xer/group.ts`: View > Group By. Bands per activity code value are Wbs-shaped nodes with
+  `group` set (not real WBS: no comments on them, `a.wbs` stays the real WBS); `shownSchedule`
+  swaps them in as `roots`, so rows, rollups, Gantt, copy and Excel work unchanged. App code
+  that shows or expands bands uses `this.shown()`, and `revealActivity` takes `bandOf`.
+  The choice is saved in prefs by code type name (`groupBy`).
 - `src/xer/comments.ts`: review comment model (targets, merge, save format; no DOM).
   `src/ui/comments.ts`: comment dialogs and the Comments tab
 - `src/features.ts`: feature flags; check them, don't delete features. `src/main.ts` starts
@@ -260,6 +265,9 @@ under the mouse on mousedown, or double-click stops working.
   Each comment keeps a snapshot of the row's dates; the panel's automatic Status column
   says "Moved since" when they differ (also "Not in this schedule" and "Done by").
 - Merging (`mergeComments`) is by comment id; the copy with the later `updated` wins.
+  Replies (`replies`) merge separately by reply id (later `updated` wins, deletes are
+  tombstones), and adding one doesn't bump the comment's `updated`, so a reviewer's edit
+  and the scheduler's reply made in different files both survive.
   Deletes are tombstones (`deleted: true`) and are saved too, so merging an older
   file can't bring a deleted comment back. Importing the same file twice is a no-op.
 - Saving: Ctrl+S includes the comments; a reviewer's copy is named

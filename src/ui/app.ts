@@ -22,6 +22,7 @@ import {
 import { formatDate, isMilestone, type DurationUnit } from "../xer/format";
 import { compileFilter, emptyFilter, type CompiledFilter, type FilterState } from "../xer/filter";
 import { applyRollups, type Activity, type Relationship, type Schedule, type Wbs } from "../xer/model";
+import { groupByCode, shownSchedule, type Grouping } from "../xer/group";
 import { XerParseError } from "../xer/parse";
 import {
   activitiesInDisplayOrder,
@@ -39,7 +40,7 @@ import { openColumnFilter } from "./column-filter";
 import { openColumnsDialog } from "./columns-dialog";
 import { Gantt, TIMESCALES, type Timescale } from "./gantt";
 import { Grid } from "./grid";
-import { askReviewerName, CommentsPanel, describeTarget, editCommentDialog } from "./comments";
+import { askReviewerName, CommentsPanel, describeTarget, editCommentDialog, replyDialog } from "./comments";
 import { MenuBar, popupMenu, type MenuItem } from "./menu";
 import { RelationsPanel } from "./relations";
 import { DEFAULT_HISTOGRAM, ResourcePanel, type HistogramSettings } from "./resources";
@@ -85,6 +86,8 @@ interface Prefs {
   histogram: HistogramSettings;
   /** Name shown on review comments made in this browser. */
   reviewer: string;
+  /** View > Group By: an activity code type's name, or "" for WBS. */
+  groupBy: string;
 }
 
 type BottomTab = "details" | "resources" | "spreadsheet" | "comments" | "changes" | "check";
@@ -123,6 +126,7 @@ const DEFAULT_PREFS: Prefs = {
   spreadsheet: DEFAULT_SPREADSHEET,
   histogram: DEFAULT_HISTOGRAM,
   reviewer: "",
+  groupBy: "",
 };
 
 function loadPrefs(): Prefs {
@@ -149,11 +153,14 @@ function isActivity(x: Activity | Wbs): x is Activity {
 
 /** The comment-index key for a grid row (matches `targetKey`). */
 function rowKey(r: GridRow): string {
+  if (r.kind === "wbs" && r.wbs.group) return "";
   return itemKey(r.kind === "wbs" ? r.wbs : r.act);
 }
 
 export class App {
   private schedule: Schedule | null = null;
+  /** View > Group By: bands by an activity code instead of WBS, or null. */
+  private grouping: Grouping | null = null;
   private fileName = "";
   private fileBytes: Uint8Array | null = null;
   private prefs = loadPrefs();
@@ -306,7 +313,7 @@ export class App {
     this.succs = new RelationsPanel("Successors", unit, FEATURES.relationshipNavigation, nav);
 
     this.search = new Search({
-      activities: () => (this.schedule ? activitiesInDisplayOrder(this.schedule, this.view) : []),
+      activities: () => (this.schedule ? activitiesInDisplayOrder(this.shown(), this.view) : []),
       current: () => (this.selected && isActivity(this.selected) ? this.selected : null),
       goTo: (a) => this.goTo(a),
       onHitsChanged: () => this.grid.render(),
@@ -366,6 +373,8 @@ export class App {
       onEdit: (c) => void this.editComment(c),
       onDelete: (c) => this.deleteComment(c),
       onToggleDone: (c) => void this.toggleDone(c),
+      onReply: (c) => void this.replyTo(c),
+      onDeleteReply: (c, id) => this.deleteReply(c, id),
       onAddGeneral: () => void this.addComment(null),
       onImport: () => this.importInput.click(),
     });
@@ -587,8 +596,9 @@ export class App {
       this.resources.reset();
       this.spreadsheet.reset();
       this.healthCache = null;
-      this.view.expanded = expandedToLevel(schedule, FEATURES.defaultExpandLevel);
       this.view.columns = new Map(scheduleColumns(schedule).map((c) => [c.key, c]));
+      this.grouping = this.makeGrouping(schedule);
+      this.view.expanded = expandedToLevel(shownSchedule(schedule, this.grouping), FEATURES.defaultExpandLevel);
       // A loaded baseline stays: compare the newly opened file with it.
       this.recompare();
       this.updateRelLines();
@@ -656,7 +666,7 @@ export class App {
 
   private rebuild(): void {
     if (!this.schedule) return;
-    this.rows = buildRows(this.schedule, this.view);
+    this.rows = buildRows(this.shown(), this.view);
     this.rowIndex.clear();
     this.rows.forEach((r, i) => this.rowIndex.set(r.kind === "wbs" ? r.wbs : r.act, i));
     this.grid.render();
@@ -702,7 +712,9 @@ export class App {
     if (row.kind === "act") {
       this.setStatus(`${row.act.code} – ${row.act.name}`);
     } else {
-      this.setStatus(`WBS ${row.wbs.fullCode} – ${row.wbs.name} (${row.wbs.activityCount.toLocaleString()} activities)`);
+      const w = row.wbs;
+      const what = w.group ? `${w.group.label} ${w.code || "(blank)"}` : `WBS ${w.fullCode}`;
+      this.setStatus(`${what} – ${w.name} (${w.activityCount.toLocaleString()} activities)`);
     }
   }
 
@@ -737,7 +749,7 @@ export class App {
       this.extras.add(a);
       this.setViewFilter();
     }
-    revealActivity(this.view.expanded, a);
+    revealActivity(this.view.expanded, a, this.grouping?.bandOf);
     this.rebuild();
     const i = this.rowIndex.get(a);
     if (i === undefined) return;
@@ -838,7 +850,7 @@ export class App {
 
   private viewMenu(): MenuItem[] {
     const loaded = () => this.schedule !== null;
-    const s = () => this.schedule!;
+    const s = () => this.shown();
     const levels: MenuItem[] = [1, 2, 3, 4, 5].map((n) => ({
       label: `Level ${n}`,
       enabled: loaded,
@@ -884,6 +896,21 @@ export class App {
         },
       },
     );
+    if (FEATURES.groupBy) {
+      items.push({
+        label: "Group By",
+        enabled: loaded,
+        items: () => [
+          { label: "WBS", checked: () => !this.grouping, action: () => this.setGroupBy("") },
+          ...(this.schedule?.codeTypes.length ? ["-" as const] : []),
+          ...(this.schedule?.codeTypes ?? []).map((t) => ({
+            label: t.label,
+            checked: () => this.grouping?.type === t,
+            action: () => this.setGroupBy(t.label),
+          })),
+        ],
+      });
+    }
     if (FEATURES.calendars) items.push({ label: "Calendars...", enabled: loaded, action: () => this.openCalendars() });
     items.push(
       "-",
@@ -1005,7 +1032,7 @@ export class App {
   /** The toolbar's buttons: the commands people reach for most, in menu order. */
   private toolItems(): ToolItem[] {
     const loaded = () => this.schedule !== null;
-    const s = () => this.schedule!;
+    const s = () => this.shown();
     const items: ToolItem[] = [{ icon: "open", title: "Open (Ctrl+O)", action: () => this.fileInput.click() }];
     if (FEATURES.embedSave) {
       items.push({ icon: "save", title: "Save Viewer with Schedule (Ctrl+S)", enabled: loaded, action: () => void this.saveEmbedded() });
@@ -1180,6 +1207,16 @@ export class App {
           "-",
         );
       }
+      const codeType = FEATURES.groupBy ? this.codeTypeOfColumn(key) : undefined;
+      if (codeType) {
+        const on = this.grouping?.type === codeType;
+        items.push(
+          on
+            ? { label: "Group by WBS", action: () => this.setGroupBy("") }
+            : { label: `Group by ${codeType.label}`, action: () => this.setGroupBy(codeType.label) },
+          "-",
+        );
+      }
       const shown = this.columns().map((c) => c.key);
       items.push({
         label: `Hide "${col.label}"`,
@@ -1196,7 +1233,7 @@ export class App {
   private reviewMenu(): MenuItem[] {
     const loaded = () => this.schedule !== null;
     const sel = this.selected;
-    const onSel = sel ? (isActivity(sel) ? sel.code : `WBS ${sel.code}`) : "";
+    const onSel = sel ? (isActivity(sel) ? sel.code : sel.group ? `${sel.group.label} ${sel.code}` : `WBS ${sel.code}`) : "";
     return [
       { label: sel ? `Add Comment on ${onSel}...` : "Add Comment...", key: "Ctrl+M", enabled: () => loaded() && !!this.selected, action: () => void this.addComment(this.selected) },
       { label: "Add General Comment...", enabled: loaded, action: () => void this.addComment(null) },
@@ -1217,7 +1254,7 @@ export class App {
     const row = this.rows[i];
     if (row) items.push(...this.rowItems(row, i), "-");
     items.push(
-      { label: "Expand All", action: () => this.setExpanded(expandedAll(s)) },
+      { label: "Expand All", action: () => this.setExpanded(expandedAll(this.shown())) },
       { label: "Collapse All", action: () => this.setExpanded(new Set()) },
       "-",
     );
@@ -1244,7 +1281,7 @@ export class App {
     const sep = () => items.length && items[items.length - 1] !== "-" && items.push("-");
     if (FEATURES.comments) {
       const counts = this.commentIndex.get(rowKey(row));
-      items.push({ label: "Add Comment...", key: "Ctrl+M", action: () => void this.addComment(item) });
+      if (!(row.kind === "wbs" && row.wbs.group)) items.push({ label: "Add Comment...", key: "Ctrl+M", action: () => void this.addComment(item) });
       if (counts) items.push({ label: `Show Comments (${counts[0] + counts[1]})`, action: () => this.showCommentsTab() });
     }
     if (FEATURES.copyRows) {
@@ -1280,6 +1317,10 @@ export class App {
   /** Adds a comment on an activity or WBS band, or a general one when `item` is null. */
   private async addComment(item: Activity | Wbs | null): Promise<void> {
     if (!this.schedule) return;
+    if (item && !isActivity(item) && item.group) {
+      this.setStatus(`Comments go on activities and WBS bands. "${item.group.label}" bands aren't WBS, so comment on an activity, or use View > Group By > WBS.`, true);
+      return;
+    }
     const author = await this.ensureReviewer();
     if (!author) return;
     const target = item ? targetFor(item) : ({ kind: "general" } as const);
@@ -1313,6 +1354,28 @@ export class App {
     if (!window.confirm(`Delete this comment by ${c.author}?\n\n"${preview}"`)) return;
     this.replaceComment({ ...c, deleted: true, updated: Date.now() });
     this.commentsChanged("Comment deleted.");
+  }
+
+  /** Adds a reply. The comment's own `updated` stays: replies merge by their own ids. */
+  private async replyTo(c: ReviewComment): Promise<void> {
+    const author = await this.ensureReviewer();
+    if (!author) return;
+    const item = this.schedule ? resolveTarget(this.schedule, c.target) : null;
+    const text = await replyDialog(c, describeTarget(c, item), author);
+    if (!text) return;
+    const now = Date.now();
+    this.replaceComment({ ...c, replies: [...(c.replies ?? []), { id: newCommentId(), author, text, created: now, updated: now }] });
+    this.commentsChanged("Reply added.");
+  }
+
+  private deleteReply(c: ReviewComment, id: string): void {
+    const r = c.replies?.find((x) => x.id === id);
+    if (!r) return;
+    const preview = r.text.length > 80 ? r.text.slice(0, 80) + "…" : r.text;
+    if (!window.confirm(`Delete this reply by ${r.author}?\n\n"${preview}"`)) return;
+    const replies = (c.replies ?? []).map((x) => (x.id === id ? { ...x, deleted: true, updated: Date.now() } : x));
+    this.replaceComment({ ...c, replies });
+    this.commentsChanged("Reply deleted.");
   }
 
   private async toggleDone(c: ReviewComment): Promise<void> {
@@ -1444,13 +1507,47 @@ export class App {
     }
   }
 
+  /** The schedule as the grid and Gantt show it: by WBS, or the Group By bands. */
+  private shown(): Schedule {
+    return shownSchedule(this.schedule!, this.grouping);
+  }
+
+  /** The Group By bands for the saved choice, or null (WBS) when this file lacks that code. */
+  private makeGrouping(s: Schedule): Grouping | null {
+    const t = this.prefs.groupBy ? s.codeTypes.find((c) => c.label === this.prefs.groupBy) : undefined;
+    return t ? groupByCode(s, t) : null;
+  }
+
+  /** The activity code type a code column shows, if `key` is one. */
+  private codeTypeOfColumn(key: string) {
+    const m = /^code(?:desc)?:(.*)$/.exec(key);
+    return m ? this.schedule?.codeTypes.find((t) => t.label === m[1]) : undefined;
+  }
+
+  /** View > Group By: "" for WBS, or an activity code type's name. Opens every band. */
+  private setGroupBy(label: string): void {
+    this.prefs.groupBy = label;
+    this.savePrefs();
+    if (!this.schedule) return;
+    this.grouping = this.makeGrouping(this.schedule);
+    if (this.selected && !isActivity(this.selected)) this.selected = null;
+    this.view.expanded = expandedAll(this.shown());
+    this.applyFilter(true);
+    this.setStatus(this.grouping ? `Grouped by ${this.grouping.type.label}.` : "Grouped by WBS.");
+  }
+
   /** Selects a WBS band, expanding its parents. */
   private goToWbs(w: Wbs): void {
     for (let p = w.parent; p; p = p.parent) this.view.expanded.add(p.id);
     this.rebuild();
     const i = this.rowIndex.get(w);
     if (i === undefined) {
-      this.setStatus(`WBS ${w.fullCode} is hidden by the current filter.`, true);
+      this.setStatus(
+        this.grouping
+          ? `WBS ${w.fullCode} isn't shown while grouped by ${this.grouping.type.label} (View > Group By > WBS).`
+          : `WBS ${w.fullCode} is hidden by the current filter.`,
+        true,
+      );
       return;
     }
     this.grid.scrollToIndex(i, true);
@@ -1495,7 +1592,7 @@ export class App {
     const test = this.baseFilter;
     const extras = this.extras;
     this.view.filter = test && extras.size ? (a) => test(a) || extras.has(a) : test;
-    if (this.schedule) applyRollups(this.schedule.roots, this.view.filter ?? undefined);
+    if (this.schedule) applyRollups(this.shown().roots, this.view.filter ?? undefined);
   }
 
   /**
@@ -1678,7 +1775,8 @@ export class App {
     const s = this.schedule;
     if (!s) return;
     const ctx = this.view.ctx;
-    const rows = allRows ? buildRows(s, { ...this.view, expanded: expandedAll(s) }) : this.rows;
+    const shown = this.shown();
+    const rows = allRows ? buildRows(shown, { ...this.view, expanded: expandedAll(shown) }) : this.rows;
     if (!rows.length) {
       this.setStatus("Nothing to export: no rows match the current filters.");
       return;
@@ -1803,7 +1901,7 @@ export class App {
   /** Shows only the activities a check flagged, opening the WBS they are in. */
   private pickCheck(r: CheckResult): void {
     this.filterState.check = { name: r.name, ids: r.activities };
-    for (const a of r.activities) revealActivity(this.view.expanded, a);
+    for (const a of r.activities) revealActivity(this.view.expanded, a, this.grouping?.bandOf);
     this.applyFilter();
     const n = r.activities.size;
     this.setStatus(`${r.name}: showing the ${n.toLocaleString()} activit${n === 1 ? "y" : "ies"} it flags. Show All Activities (or Clear Filters) to go back.`);
@@ -1972,7 +2070,7 @@ export class App {
   /** Filter > Trace Logic: shows only the traced chain, expanding the WBS it runs through. */
   private setTrace(t: TraceSpec | null): void {
     this.filterState.trace = t;
-    if (t) for (const a of traceLogic(t)) revealActivity(this.view.expanded, a);
+    if (t) for (const a of traceLogic(t)) revealActivity(this.view.expanded, a, this.grouping?.bandOf);
     this.applyFilter();
     if (!t) return;
     const i = this.rowIndex.get(t.root);

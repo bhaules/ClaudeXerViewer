@@ -115,6 +115,7 @@ export function expandedAll(schedule: Schedule): Set<string> {
   return new Set(allWbs(schedule).map((w) => w.id));
 }
 
-export function revealActivity(expanded: Set<string>, act: Activity): void {
-  for (let w: Wbs | null = act.wbs; w; w = w.parent) expanded.add(w.id);
+/** Expands the bands above an activity. `bandOf` is the Group By band it sits in, if grouped. */
+export function revealActivity(expanded: Set<string>, act: Activity, bandOf?: Map<Activity, Wbs>): void {
+  for (let w: Wbs | null = bandOf?.get(act) ?? act.wbs; w; w = w.parent) expanded.add(w.id);
 }

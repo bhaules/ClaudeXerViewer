@@ -38,6 +38,9 @@ open the `.xer` themselves.
    "Moved since" when an activity's dates have changed since the comment was written,
    "Not in this schedule" when the activity was deleted or renumbered, or who marked
    it done. **Filter > With comments** shows only the activities that have them.
+5. Click **Reply** on a comment to answer it (for example, what you changed). Send your
+   saved copy back and the reviewer sees the reply under their comment; replies from
+   several people in several files are all kept.
 
 Comments are never written into the `.xer` and nothing is imported into P6: you make
 the changes in P6 yourself. If someone closes the window without saving, the browser
@@ -70,6 +73,9 @@ in the same browser.
   All, Columns, Relationship Lines, Bar Labels, Timescale and zoom.
 - **WBS**: a schedule opens fully expanded. Double-click a band or click its arrow to expand/collapse.
   **View > Expand All / Collapse All / Expand To > Level n**.
+- **Group By**: **View > Group By** shows bands by an activity code instead of WBS (or
+  right-click a code column's header), like P6's Group and Sort. Bands roll up dates,
+  float and units; activities without a value go in a "No <code>" band at the end.
 - **Columns**: drag a header to move its column, or its edge to resize. Click a header to sort activities
   within each WBS (click again for descending, a third time to reset).
   Right-click a header to sort, filter or hide that column.

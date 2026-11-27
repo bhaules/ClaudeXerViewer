@@ -4,6 +4,7 @@ import {
   COMMENT_TYPES,
   changedSince,
   liveComments,
+  liveReplies,
   resolveTarget,
   type CommentType,
   type ReviewComment,
@@ -43,6 +44,19 @@ export async function askReviewerName(current: string): Promise<string | null> {
   return name;
 }
 
+/** The replies under a comment in the Comments tab. Everything from the file is escaped. */
+function replies(c: ReviewComment): string {
+  return liveReplies(c)
+    .map(
+      (r) =>
+        `<div class="cm-reply" data-r="${esc(r.id)}">` +
+        `<div class="cm-rhead"><b>${esc(r.author)}</b> · ${formatStamp(r.created)}` +
+        `<button class="cm-rdel" title="Delete this reply">×</button></div>` +
+        `<div class="cm-rtext">${esc(r.text)}</div></div>`,
+    )
+    .join("");
+}
+
 export interface CommentDraft {
   type: CommentType;
   text: string;
@@ -75,6 +89,31 @@ export async function editCommentDialog(about: string, author: string, initial?:
   }, text);
 }
 
+/** Reply to a comment. Shows the comment being answered. */
+export async function replyDialog(c: ReviewComment, about: string, author: string): Promise<string | null> {
+  const text = el("textarea", "dlg-text");
+  text.rows = 5;
+  text.placeholder = "Type your reply";
+  const warn = el("div", "dlg-warn hidden", ["Please type a reply."]);
+  const quote = el("div", "dlg-quote", [el("div", "dlg-quote-by", [`${c.author} wrote:`]), c.text]);
+  const body = el("div", "", [
+    el("div", "dlg-about", [about]),
+    quote,
+    el("div", "dlg-row", [el("span", "dlg-by", [`Reply by ${author}`])]),
+    text,
+    warn,
+    el("p", "dlg-note", ["Ctrl+Enter to save."]),
+  ]);
+  return formDialog("Reply", body, "Reply", () => {
+    if (!text.value.trim()) {
+      warn.classList.remove("hidden");
+      text.focus();
+      return null;
+    }
+    return text.value.trim();
+  }, text);
+}
+
 export interface CommentsPanelHost {
   schedule(): Schedule | null;
   /** All comments, including deleted ones (the panel skips those). */
@@ -83,6 +122,8 @@ export interface CommentsPanelHost {
   onEdit(c: ReviewComment): void;
   onDelete(c: ReviewComment): void;
   onToggleDone(c: ReviewComment): void;
+  onReply(c: ReviewComment): void;
+  onDeleteReply(c: ReviewComment, replyId: string): void;
   onAddGeneral(): void;
   onImport(): void;
 }
@@ -123,6 +164,8 @@ export class CommentsPanel {
       if (!tr) return;
       const c = this.shown[Number(tr.dataset.i)];
       if (t.closest(".cm-done")) this.host.onToggleDone(c);
+      else if (t.closest(".cm-reply-btn")) this.host.onReply(c);
+      else if (t.closest(".cm-rdel")) this.host.onDeleteReply(c, t.closest<HTMLElement>(".cm-reply")?.dataset.r ?? "");
       else if (t.closest(".cm-edit")) this.host.onEdit(c);
       else if (t.closest(".cm-del")) this.host.onDelete(c);
       else {
@@ -182,17 +225,17 @@ export class CommentsPanel {
           `<td class="c"><input type="checkbox" class="cm-done" title="Mark done" ${c.status === "done" ? "checked" : ""}></td>` +
           `<td><span class="cm-type t-${esc(c.type.replace(/\s+/g, ""))}">${esc(c.type)}</span></td>` +
           `<td class="cm-target" title="${esc(describeTarget(c, item))}">${esc(describeTarget(c, item))}</td>` +
-          `<td class="cm-text">${esc(c.text)}</td>` +
+          `<td class="cm-text"><div class="cm-main">${esc(c.text)}</div>${replies(c)}</td>` +
           `<td>${esc(c.author)}</td>` +
           `<td>${formatStamp(c.created)}${c.updated > c.created + 1000 ? " (edited)" : ""}</td>` +
           `<td class="cm-notes">${esc(notes.join(" · "))}</td>` +
-          `<td class="cm-actions"><button class="btn cm-edit" title="Edit">Edit</button><button class="btn cm-del" title="Delete">Delete</button></td>` +
+          `<td class="cm-actions"><button class="btn cm-reply-btn" title="Answer this comment">Reply</button><button class="btn cm-edit" title="Edit">Edit</button><button class="btn cm-del" title="Delete">Delete</button></td>` +
           `</tr>`
         );
       })
       .join("");
     this.body.innerHTML =
-      `<table class="cm-table"><thead><tr><th>Done</th><th>Type</th><th>Activity / WBS</th><th>Comment</th><th>By</th><th>Date</th><th title="Filled in automatically: moved since the comment, not in this schedule, or who marked it done">Status</th><th></th></tr></thead>` +
+      `<table class="cm-table"><thead><tr><th>Done</th><th>Type</th><th>Activity / WBS</th><th>Comment and replies</th><th>By</th><th>Date</th><th title="Filled in automatically: moved since the comment, not in this schedule, or who marked it done">Status</th><th></th></tr></thead>` +
       `<tbody>${rows}</tbody></table>`;
   }
 }

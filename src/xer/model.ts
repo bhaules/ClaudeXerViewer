@@ -50,6 +50,8 @@ export interface Wbs {
    * for its Original / Remaining Duration and float. Null when it has no activities.
    */
   calendar: Calendar | null;
+  /** Set on bands made by View > Group By (one per code value): not a real WBS. */
+  group?: ActivityCodeType;
 }
 
 /** An activity code type (ACTVTYPE), e.g. "Discipline". Only types used in the file are kept. */
@@ -62,8 +64,12 @@ export interface ActivityCodeType {
 
 /** The code an activity has for one code type: value ("ME") and description ("Mechanical"). */
 export interface ActivityCodeValue {
+  /** ACTVCODE id: values can repeat under different parent codes. */
+  id: string;
   value: string;
   description: string;
+  /** Order in the code dictionary (ACTVCODE.seq_num). */
+  seq: number;
 }
 
 /** Labor units in hours of work (TASK *_work_qty), summed for WBS. */
@@ -530,7 +536,7 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
   return { header, projects, roots, activities, activityById, relationships, calendars, udfTypes, resources, codeTypes };
 }
 
-const EMPTY_WBS: Wbs = {
+export const EMPTY_WBS: Wbs = {
   id: "",
   project: null,
   parent: null,
@@ -591,7 +597,12 @@ function readActivityCodes(typeRows: Row[], codeRows: Row[], assignRows: Row[], 
   const types = new Map<string, { row: Row; used: boolean }>();
   for (const r of typeRows) types.set(r.actv_code_type_id, { row: r, used: false });
   const codes = new Map<string, ActivityCodeValue>();
-  for (const r of codeRows) codes.set(r.actv_code_id, { value: r.short_name ?? "", description: r.actv_code_name ?? "" });
+  for (const r of codeRows) codes.set(r.actv_code_id, {
+      id: r.actv_code_id,
+      value: r.short_name ?? "",
+      description: r.actv_code_name ?? "",
+      seq: num(r.seq_num) ?? 0,
+    });
 
   for (const r of assignRows) {
     const type = types.get(r.actv_code_type_id);

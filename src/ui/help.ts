@@ -38,6 +38,7 @@ const SECTIONS: Section[] = [
         <li>Dates: <b>A</b> = actual, <b>*</b> = constrained. The selected row is amber.</li>
         <li>WBS bands show their summary dates, lowest float and totals.</li>
         <li><b>View &gt; Columns...</b> picks the columns, including activity codes, UDFs and baseline columns.</li>
+        <li><b>View &gt; Group By</b> shows bands by an activity code (e.g. Discipline) instead of WBS. Or right-click a code column's header.</li>
         <li>Drag a header to move a column; drag its edge to resize it.</li>
         <li>Click a header to sort (within each WBS). Click again for descending, a third time to reset.</li>
         <li><b>View &gt; Duration Unit</b> shows hours, days, weeks or months.</li>
@@ -117,6 +118,7 @@ const SECTIONS: Section[] = [
       <ul>
         <li><b>Reviewing:</b> right-click a row and choose <b>Add Comment</b> (Ctrl+M). Save with Ctrl+S and send the file back.</li>
         <li><b>Collecting:</b> drop all the returned files onto your copy at once. The <b>Comments</b> tab lists them; tick <b>Done</b> as you deal with them.</li>
+        <li><b>Reply</b> on the Comments tab answers a comment. Replies travel in the saved file, so the conversation goes back and forth.</li>
         <li><b>Moved since</b> means the activity's dates have changed since the comment was written.</li>
         <li>Comments stay in the viewer file. They never go into the .xer or P6.</li>
       </ul>`,
