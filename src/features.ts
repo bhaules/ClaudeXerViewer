@@ -9,13 +9,13 @@ export const FEATURES = {
   ganttRelationships: true,
   /** Resource Usage tab in the bottom panel: resource list + histogram. */
   resourceHistogram: true,
-  /** Predecessor / Successor panels under the grid. */
+  /** The bottom panel (Activity Details and the other tabs; the name is historical). */
   relationships: true,
   /** Double-click a relationship row to jump to that activity. */
   relationshipNavigation: true,
   /** Ctrl+F find dialog with F3 / Shift+F3. */
   search: true,
-  /** Filter bar (status, critical, milestones, dates) and the filter row under the headers. */
+  /** The Filter menu (status, critical, milestones, dates) and the filter row under the headers. */
   filters: true,
   /** Click column headers to sort activities within their WBS. */
   sorting: true,

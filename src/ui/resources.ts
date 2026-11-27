@@ -238,7 +238,7 @@ export class ResourcePanel {
     return (a) => a.assignments.some((x) => ids.has(x.resource.id));
   }
 
-  /** e.g. "CON.Civil" or "3 resources", for the filter bar. */
+  /** e.g. "CON.Civil" or "3 resources", for the status bar's filter note. */
   selectionLabel(): string {
     const s = this.host.schedule();
     if (!s) return "";

@@ -3,6 +3,28 @@
 All notable changes to XER Viewer. Each version is a GitHub release with the viewer
 attached as `xer-viewer-v<version>.html` (`xer-viewer.html` before 0.6.0).
 
+## 0.9.3 (2026-11-27)
+
+### Fixed
+- **Imported comments are checked.** Comments from reviewers' files are rebuilt field by
+  field, so a hand-edited file can't put code into the page. An unknown comment type
+  shows as Comment instead of breaking the Comments tab.
+- **Comments per project.** In a file with several projects, the same Activity ID in two
+  projects keeps its own comment markers and With Comments filter.
+- **Find after opening another file.** Find Next no longer says "no match" until the term
+  is typed again.
+- **Odd files don't crash or hang.** A table missing a text column (names, codes) shows
+  blanks, and WBS that are each other's parent no longer hide their activities or freeze
+  the tab.
+- **Damaged saved copies say so.** A saved viewer file whose schedule can't be read now
+  explains that instead of showing the empty welcome screen.
+- **Shortcuts wait for dialogs.** Ctrl+O, Ctrl+S, Ctrl+E and Ctrl+M do nothing while a
+  dialog is open, so they can't open a second dialog behind it.
+- **Saved copies stay offline.** Turning on Notify About Updates in a saved copy no longer
+  starts update checks.
+- **Smoother column resizing.** Widths are saved when you stop dragging, not on every
+  mouse movement.
+
 ## 0.9.2 (2026-11-26)
 
 ### Changed

@@ -57,14 +57,18 @@ export function targetFor(item: Activity | Wbs): CommentTarget {
   return "wbs" in item ? { kind: "activity", project, code: item.code } : { kind: "wbs", project, code: item.fullCode };
 }
 
-export function sameTarget(a: CommentTarget, b: CommentTarget): boolean {
-  if (a.kind === "general" || b.kind === "general") return a.kind === b.kind;
-  return a.kind === b.kind && a.code === b.code && (a.project === b.project || !a.project || !b.project);
+/**
+ * Key for indexing comments by row: "activity|PROJ|A1000", "wbs|PROJ|DEMO-001.CON" or
+ * "general". The project is part of it, so the same Activity ID in two projects of one
+ * file keeps its own comments.
+ */
+export function targetKey(t: CommentTarget): string {
+  return t.kind === "general" ? "general" : `${t.kind}|${t.project}|${t.code}`;
 }
 
-/** Key for indexing comments by row: "activity|A1000", "wbs|DEMO-001.CON" or "general". */
-export function targetKey(t: CommentTarget): string {
-  return t.kind === "general" ? "general" : `${t.kind}|${t.code}`;
+/** The comment-index key of a row (matches `targetKey`). */
+export function itemKey(item: Activity | Wbs): string {
+  return targetKey(targetFor(item));
 }
 
 export function snapshotOf(item: Activity | Wbs): CommentSnapshot {
@@ -158,7 +162,12 @@ export function parseComments(json: string): ReviewComment[] {
   }
   const list = (data as Partial<CommentFile>)?.comments;
   if (!Array.isArray(list)) return [];
-  return list.filter(isComment);
+  const out: ReviewComment[] = [];
+  for (const c of list) {
+    const clean = cleanComment(c);
+    if (clean) out.push(clean);
+  }
+  return out;
 }
 
 /** Pulls the comments out of a saved viewer HTML file (as text). */
@@ -167,17 +176,42 @@ export function extractCommentsFromHtml(html: string): ReviewComment[] {
   return m ? parseComments(m[1]) : [];
 }
 
-function isComment(c: unknown): c is ReviewComment {
-  const x = c as ReviewComment;
-  return (
-    !!x &&
-    typeof x.id === "string" &&
-    typeof x.text === "string" &&
-    typeof x.author === "string" &&
-    typeof x.created === "number" &&
-    typeof x.updated === "number" &&
-    (x.status === "open" || x.status === "done") &&
-    !!x.target &&
-    (x.target.kind === "general" || ((x.target.kind === "activity" || x.target.kind === "wbs") && typeof x.target.code === "string"))
-  );
+/**
+ * A comment from a file someone sent, rebuilt field by field so nothing unexpected gets
+ * through: a file can be hand-edited. Null when the essentials are missing or the wrong type.
+ * An unknown type becomes "Comment" rather than dropping the comment.
+ */
+function cleanComment(c: unknown): ReviewComment | null {
+  if (!c || typeof c !== "object") return null;
+  const x = c as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const time = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  const id = str(x.id);
+  const text = str(x.text);
+  const author = str(x.author);
+  const created = time(x.created);
+  const updated = time(x.updated);
+  const status = x.status === "open" || x.status === "done" ? x.status : undefined;
+  if (id === undefined || text === undefined || author === undefined || created === undefined || updated === undefined || !status) {
+    return null;
+  }
+  const t = x.target as Record<string, unknown> | null | undefined;
+  if (!t || typeof t !== "object") return null;
+  let target: CommentTarget;
+  if (t.kind === "general") target = { kind: "general" };
+  else if ((t.kind === "activity" || t.kind === "wbs") && typeof t.code === "string") {
+    target = { kind: t.kind, project: str(t.project) ?? "", code: t.code };
+  } else return null;
+  const type = (COMMENT_TYPES as readonly unknown[]).includes(x.type) ? (x.type as CommentType) : "Comment";
+  const out: ReviewComment = { id, target, type, text, author, created, updated, status };
+  const doneBy = str(x.doneBy);
+  const doneAt = time(x.doneAt);
+  if (doneBy !== undefined) out.doneBy = doneBy;
+  if (doneAt !== undefined) out.doneAt = doneAt;
+  const s = x.snapshot as Record<string, unknown> | null | undefined;
+  if (s && typeof s === "object") {
+    out.snapshot = { name: str(s.name) ?? "", start: str(s.start) ?? "", finish: str(s.finish) ?? "", remaining: str(s.remaining) ?? "" };
+  }
+  if (x.deleted === true) out.deleted = true;
+  return out;
 }

@@ -96,6 +96,11 @@ export class Search {
     this.status.textContent = `Match ${matches.indexOf(target) + 1} of ${matches.length}`;
   }
 
+  /** Recomputes the matches, e.g. for a newly opened file. */
+  refresh(): void {
+    this.refreshHits();
+  }
+
   private refreshHits(): void {
     const raw = this.input.value.trim();
     const cs = this.matchCase.checked;

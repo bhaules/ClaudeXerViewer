@@ -318,9 +318,9 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
       id: r.wbs_id,
       project: null,
       parent: null,
-      code: r.wbs_short_name,
-      fullCode: r.wbs_short_name,
-      name: r.wbs_name,
+      code: r.wbs_short_name ?? "",
+      fullCode: r.wbs_short_name ?? "",
+      name: r.wbs_name ?? "",
       seq: num(r.seq_num) ?? 0,
       level: 0,
       children: [],
@@ -349,8 +349,8 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
     const root = wbsById.get(r.wbs_id)!;
     const project: Project = {
       id: r.proj_id,
-      shortName: info?.proj_short_name || r.wbs_short_name,
-      name: r.wbs_name,
+      shortName: info?.proj_short_name || r.wbs_short_name || "",
+      name: r.wbs_name ?? "",
       dataDate: parseXerDate(info?.last_recalc_date),
       root,
       calendar: (info && calendars.get(info.clndr_id)) || defaultCal,
@@ -385,6 +385,24 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
   };
   roots.sort((a, b) => a.seq - b.seq || a.code.localeCompare(b.code));
   for (const r of roots) assignLevels(r, 0);
+  for (const node of wbsById.values()) {
+    if (visited.has(node)) continue;
+    // Not reached from any root: it hangs off a parent loop. Detach the top of its chain.
+    let top = node;
+    const seen = new Set<Wbs>();
+    while (top.parent && !seen.has(top.parent) && !visited.has(top.parent)) {
+      seen.add(top);
+      top = top.parent;
+    }
+    if (top.parent && !visited.has(top.parent)) {
+      top.parent.children = top.parent.children.filter((c) => c !== top);
+      top.parent = null;
+    }
+    if (!top.parent) {
+      roots.push(top);
+      assignLevels(top, 0);
+    }
+  }
 
   // Activities
   const rsrcNames = new Map(get("RSRC").map((r) => [r.rsrc_id, r.rsrc_name || r.rsrc_short_name]));
@@ -415,8 +433,8 @@ export function buildSchedule({ header, tables }: XerTables): Schedule {
     const st = status(r.status_code);
     const a: Activity = {
       id: r.task_id,
-      code: r.task_code,
-      name: r.task_name,
+      code: r.task_code ?? "",
+      name: r.task_name ?? "",
       wbs,
       project,
       calendar: calendars.get(r.clndr_id) ?? project?.calendar ?? defaultCal,
@@ -543,7 +561,7 @@ function readActivityUdfs(typeRows: Row[], valueRows: Row[], activities: Map<str
   const types = new Map<string, UdfType>();
   for (const r of typeRows) {
     if (r.table_name !== "TASK") continue;
-    types.set(r.udf_type_id, { id: r.udf_type_id, label: r.udf_type_label || r.udf_type_name, dataType: r.logical_data_type });
+    types.set(r.udf_type_id, { id: r.udf_type_id, label: r.udf_type_label || r.udf_type_name || "", dataType: r.logical_data_type });
   }
   const used = new Set<string>();
   for (const r of valueRows) {
@@ -586,6 +604,7 @@ function readActivityCodes(typeRows: Row[], codeRows: Row[], assignRows: Row[], 
 
   const used = [...types.values()].filter((t) => t.used).map((t) => t.row);
   const nameCount = new Map<string, number>();
+  for (const r of used) r.actv_code_type ??= "";
   for (const r of used) nameCount.set(r.actv_code_type, (nameCount.get(r.actv_code_type) ?? 0) + 1);
   const result = used
     .map((r) => {
@@ -655,8 +674,8 @@ function readAssignments(rsrcRows: Row[], assignRows: Row[], activities: Map<str
     byId.set(r.rsrc_id, {
       id: r.rsrc_id,
       code: r.rsrc_short_name || r.rsrc_id,
-      name: r.rsrc_name || r.rsrc_short_name,
-      type: RESOURCE_TYPES[r.rsrc_type] ?? r.rsrc_type,
+      name: r.rsrc_name || r.rsrc_short_name || "",
+      type: RESOURCE_TYPES[r.rsrc_type] ?? r.rsrc_type ?? "",
       assignments: [],
       budget: 0,
       actual: 0,

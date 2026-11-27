@@ -13,12 +13,6 @@ export function formatDate(ms: number | null, actual = false, constrained = fals
   return s + (actual ? " A" : "") + (constrained ? "*" : "");
 }
 
-export function formatDateTime(ms: number | null): string {
-  if (ms === null) return "";
-  const d = new Date(ms);
-  return `${formatDate(ms)} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
-}
-
 export function hoursTo(hours: number, cal: Calendar, unit: DurationUnit): number {
   switch (unit) {
     case "h": return hours;
@@ -32,10 +26,6 @@ export function hoursTo(hours: number, cal: Calendar, unit: DurationUnit): numbe
 export function formatDuration(hours: number | null, cal: Calendar, unit: DurationUnit): string {
   if (hours === null) return "";
   return trimNumber(hoursTo(hours, cal, unit)) + unit;
-}
-
-export function formatLag(hours: number, cal: Calendar, unit: DurationUnit): string {
-  return formatDuration(hours, cal, unit);
 }
 
 function trimNumber(v: number): string {

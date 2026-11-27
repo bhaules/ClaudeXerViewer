@@ -180,7 +180,7 @@ export class CommentsPanel {
         return (
           `<tr data-i="${i}" class="${c.status === "done" ? "cm-isdone" : ""}">` +
           `<td class="c"><input type="checkbox" class="cm-done" title="Mark done" ${c.status === "done" ? "checked" : ""}></td>` +
-          `<td><span class="cm-type t-${c.type.replace(/\s+/g, "")}">${esc(c.type)}</span></td>` +
+          `<td><span class="cm-type t-${esc(c.type.replace(/\s+/g, ""))}">${esc(c.type)}</span></td>` +
           `<td class="cm-target" title="${esc(describeTarget(c, item))}">${esc(describeTarget(c, item))}</td>` +
           `<td class="cm-text">${esc(c.text)}</td>` +
           `<td>${esc(c.author)}</td>` +

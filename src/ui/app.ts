@@ -8,10 +8,12 @@ import { compareSchedules, type ChangeKind, type Comparison } from "../xer/compa
 import { describeTrace, traceLogic, type TraceSpec } from "../xer/trace";
 import {
   extractCommentsFromHtml,
+  itemKey,
   liveComments,
   mergeComments,
   newCommentId,
   parseComments,
+  resolveTarget,
   snapshotOf,
   targetFor,
   targetKey,
@@ -65,8 +67,10 @@ interface Prefs {
   hideEmptyWbs: boolean;
   showToolbar: boolean;
   showGantt: boolean;
+  /** The bottom panel is showing (named when it only held the relationship panels). */
   showRelations: boolean;
   relLines: RelLines;
+  /** Filter row under the headers. */
   showFilters: boolean;
   bottomTab: BottomTab;
   /** Which Activity Details tab is showing. */
@@ -145,7 +149,7 @@ function isActivity(x: Activity | Wbs): x is Activity {
 
 /** The comment-index key for a grid row (matches `targetKey`). */
 function rowKey(r: GridRow): string {
-  return r.kind === "wbs" ? `wbs|${r.wbs.fullCode}` : `activity|${r.act.code}`;
+  return itemKey(r.kind === "wbs" ? r.wbs : r.act);
 }
 
 export class App {
@@ -196,6 +200,8 @@ export class App {
   private extras = new Set<Activity>();
   /** In a saved viewer file: what it contains, which a refresh brings back. */
   private ownBytes: Uint8Array | null = null;
+  /** A saved copy someone was sent: it never checks for updates. */
+  private savedCopy = false;
   private ownBaseline: Uint8Array | null = null;
   /** All review comments, including deleted ones (kept so merges can't revive them). */
   private comments: ReviewComment[] = [];
@@ -226,7 +232,7 @@ export class App {
       width: (k) => this.prefs.widths[k] ?? this.view.columns.get(k)?.width ?? 100,
       setWidth: (k, w) => {
         this.prefs.widths[k] = w;
-        this.savePrefs();
+        this.savePrefsSoon();
       },
       sort: () => this.view.sort,
       sortable: FEATURES.sorting,
@@ -499,6 +505,7 @@ export class App {
     this.installCopy();
     // Refreshing or closing loses an opened .xer (the browser can't reopen it by itself) and
     // unsaved comments: warn first. The browser words the question.
+    window.addEventListener("pagehide", () => this.savePrefs()); // a pending savePrefsSoon
     window.addEventListener("beforeunload", (e) => {
       if (!this.commentsDirty && !this.losesFiles()) return;
       e.preventDefault();
@@ -511,6 +518,7 @@ export class App {
 
   /** This page is a saved copy whose own schedule (and baseline) is now open. */
   markSavedCopy(): void {
+    this.savedCopy = true;
     this.ownBytes = this.fileBytes;
     this.ownBaseline = this.baselineFile?.bytes ?? null;
   }
@@ -526,7 +534,7 @@ export class App {
    * it's on. Not in the dev server, which is always ahead of the releases.
    */
   checkForUpdate(): void {
-    if (FEATURES.updateCheck && this.prefs.updateCheck && !import.meta.env.DEV) {
+    if (FEATURES.updateCheck && this.prefs.updateCheck && !this.savedCopy && !import.meta.env.DEV) {
       startUpdateChecks(() => this.prefs.updateCheck);
     }
   }
@@ -560,12 +568,14 @@ export class App {
     const overlay = el("div", "overlay", [el("div", "box", [`Opening ${name}…`])]);
     document.body.append(overlay);
     await new Promise((r) => setTimeout(r, 30)); // let the overlay paint before the parse blocks
+    let parsed = false;
     try {
       const t0 = performance.now();
       const schedule = loadSchedule(bytes);
       if (schedule.activities.length === 0 && schedule.roots.length === 0) {
         throw new XerParseError("The file has no WBS or activities in it.");
       }
+      parsed = true;
       this.schedule = schedule;
       this.fileName = name;
       this.fileBytes = bytes;
@@ -583,6 +593,7 @@ export class App {
       this.recompare();
       this.updateRelLines();
       const recovered = this.loadComments(comments);
+      this.search.refresh();
       this.welcome.classList.add("hidden");
       this.workspace.classList.remove("hidden");
       this.applyPanelVisibility();
@@ -609,8 +620,15 @@ export class App {
           (recovered ? ` Recovered ${recovered} unsaved comment change${recovered === 1 ? "" : "s"} from your last session.` : ""),
       );
     } catch (e) {
+      console.error(e);
       const msg = e instanceof XerParseError ? e.message : `Could not read this file: ${(e as Error).message}`;
-      modal("Can't open file", `<p><b>${esc(name)}</b></p><p>${esc(msg)}</p>`);
+      if (parsed) {
+        // The file was fine; showing it went wrong, and the window may be half updated.
+        modal(
+          "Something went wrong",
+          `<p>${esc(name)} was read, but showing it failed: ${esc((e as Error).message)}</p><p>Refresh the page (F5) and open it again.</p>`,
+        );
+      } else modal("Can't open file", `<p><b>${esc(name)}</b></p><p>${esc(msg)}</p>`);
     } finally {
       overlay.remove();
     }
@@ -1390,7 +1408,9 @@ export class App {
   private reindexComments(): void {
     this.commentIndex.clear();
     for (const c of liveComments(this.comments)) {
-      const key = targetKey(c.target);
+      // A comment without a project (older files) is filed under the row it lands on.
+      const item = c.target.kind !== "general" && !c.target.project && this.schedule ? resolveTarget(this.schedule, c.target) : null;
+      const key = item ? itemKey(item) : targetKey(c.target);
       const counts = this.commentIndex.get(key) ?? [0, 0];
       counts[c.status === "open" ? 0 : 1]++;
       this.commentIndex.set(key, counts);
@@ -1445,7 +1465,7 @@ export class App {
     const s = this.schedule;
     if (!s) return;
     this.compiled = compileFilter(this.filterState, this.view.columns, this.view.ctx, (a) =>
-      this.commentIndex.has(`activity|${a.code}`),
+      this.commentIndex.has(itemKey(a)),
     );
     const base = this.compiled.test;
     const byResource = this.resourceTabShown() ? this.resources.activityFilter() : null;
@@ -1610,7 +1630,7 @@ export class App {
     const others: FilterState = { ...this.filterState, columns: new Map(this.filterState.columns), values: new Map(this.filterState.values) };
     others.columns.delete(key);
     others.values.delete(key);
-    const test = compileFilter(others, this.view.columns, ctx, (a) => this.commentIndex.has(`activity|${a.code}`)).test;
+    const test = compileFilter(others, this.view.columns, ctx, (a) => this.commentIndex.has(itemKey(a))).test;
     const byResource = this.resourceTabShown() ? this.resources.activityFilter() : null;
     const found = new Map<string, { count: number; sort: ReturnType<Column["sortValue"]> }>();
     for (const a of s.activities) {
@@ -2030,7 +2050,7 @@ export class App {
     const s = this.schedule;
     if (!s) return;
     const sel = this.selected;
-    const cal = sel ? (isActivity(sel) ? sel.calendar : sel.calendar) : null;
+    const cal = sel?.calendar ?? null;
     const dd = s.projects[0]?.dataDate;
     showCalendars(s, cal, new Date(dd ?? Date.now()).getUTCFullYear());
   }
@@ -2042,9 +2062,15 @@ export class App {
     window.addEventListener("keydown", (e) => {
       const ctrl = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
+      if (document.querySelector(".modal-back")) {
+        // A dialog is open: don't open another one or act on the window behind it. Ctrl+O/S/E
+        // are swallowed so the browser's own Open / Save / mail commands don't run either.
+        if ((ctrl && ["o", "s", "e", "m"].includes(k)) || e.key === "F1") e.preventDefault();
+        return;
+      }
       if (e.key === "F1") {
         e.preventDefault(); // instead of the browser's own help page
-        if (!document.querySelector(".modal-back")) showUserGuide();
+        showUserGuide();
       } else if (ctrl && k === "o") {
         e.preventDefault();
         this.fileInput.click();
@@ -2134,7 +2160,16 @@ export class App {
     this.status.classList.toggle("alert", alert);
   }
 
+  private prefsTimer = 0;
+
+  /** For changes that come in a stream (dragging): saves once they stop. */
+  private savePrefsSoon(): void {
+    clearTimeout(this.prefsTimer);
+    this.prefsTimer = window.setTimeout(() => this.savePrefs(), 400);
+  }
+
   private savePrefs(): void {
+    clearTimeout(this.prefsTimer);
     try {
       localStorage.setItem(PREFS_KEY, JSON.stringify(this.prefs));
     } catch {

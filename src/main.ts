@@ -1,6 +1,7 @@
-import { capturePristineHtml, readEmbedded, readEmbeddedBaseline, readEmbeddedComments } from "./embed";
+import { capturePristineHtml, readEmbedded, readEmbeddedBaseline, readEmbeddedComments, type EmbeddedFile } from "./embed";
 import "./styles.css";
 import { App } from "./ui/app";
+import { modal } from "./ui/dom";
 
 // Must run before the app renders anything into the page.
 capturePristineHtml();
@@ -8,11 +9,27 @@ capturePristineHtml();
 const app = new App(document.getElementById("app")!);
 
 async function start(): Promise<void> {
-  const embedded = await readEmbedded();
+  let embedded: EmbeddedFile | null;
+  try {
+    embedded = await readEmbedded();
+  } catch (e) {
+    console.error(e);
+    modal(
+      "Can't open the saved schedule",
+      `<p>The schedule saved inside this file is damaged, so it can't be shown.</p>` +
+        `<p>Ask whoever sent it for a new copy, or open the .xer with File &gt; Open.</p>`,
+    );
+    return; // still a saved copy: no update check
+  }
   if (embedded) {
     await app.load(embedded.name, embedded.bytes, readEmbeddedComments());
-    const baseline = await readEmbeddedBaseline();
-    if (baseline) await app.setBaseline(baseline.name, baseline.bytes);
+    try {
+      const baseline = await readEmbeddedBaseline();
+      if (baseline) await app.setBaseline(baseline.name, baseline.bytes);
+    } catch (e) {
+      console.error(e);
+      modal("Baseline not loaded", `<p>The baseline saved inside this file is damaged, so the schedule is shown without it.</p>`);
+    }
     app.markSavedCopy();
     return; // a saved copy is a snapshot someone was sent: it doesn't check for updates
   }
