@@ -8,13 +8,20 @@ leaves the user's machine. The goal is to replace sending PDF printouts.
 Successor to the PySide6 app in `../xerViewer` (reference for features and
 WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
 
+## Reference docs (read the relevant section before changing that area)
+- `docs/xer-format.md`: XER tables and fields, current dates, durations, calendars,
+  driving relationships, resources, activity codes, UDFs. Read for any `src/xer/*` work.
+- `docs/ui-behaviour.md`: grid/Gantt scroll sync, WBS bands, selection, sorting, Gantt,
+  bottom panel and Resource Usage, menus, filters, Excel export, review comments, update check.
+
 ## Commands
 - `npm run dev`: dev server. Drop a .xer on the page, or open
   `http://localhost:5173/?file=/tests/fixtures/sample.xer` to auto-load the fixture.
 - `npm run build`: typecheck + build `dist/xer-viewer-v<version>.html` (everything inlined).
   The version is `package.json` `version`, also shown as `__APP_VERSION__` (Help > About,
   welcome screen, Excel Export Info). Bump it for each release and add a section to
-  `CHANGELOG.md` (Changed / Added / Fixed); the release tag is `v<version>`, its notes
+  `CHANGELOG.md` (Changed / Added / Fixed; Help > What's New shows it, so each bullet
+  needs a bold lead and a first sentence that stands alone); the release tag is `v<version>`, its notes
   follow that section, and the asset keeps the versioned file name.
 - `npm test`: Vitest (parser/model). `tests/real-files.test.ts` also parses any
   `*.xer` in the project root and is skipped when there are none.
@@ -24,259 +31,48 @@ WBS colours; don't copy its bugs, e.g. it shows planned dates, not current).
 - TypeScript (strict), no UI framework. Vite + vite-plugin-singlefile.
 - No runtime dependencies without asking. No CDN links, no fetch() of remote
   URLs: the build must work offline from file://. The one exception, asked for by the
-  user, is the update check (`src/ui/update.ts`: GitHub's latest release, silent on
-  failure, asked at most every 4 h per browser (the open page looks every 30 min and on
-  tab focus, reusing the saved answer), never in saved copies or dev; a newer version shows
-  a bar under the toolbar, not a popup; offers only links under this repo's releases). It must never send anything about the schedule or the user.
+  user, is the update check (`src/ui/update.ts`, see docs/ui-behaviour.md). It must never
+  send anything about the schedule or the user.
 - Light theme only (P6 has no dark mode).
 
-## Layout
-- `src/xer/parse.ts`: raw bytes -> tables. `decodeXer` handles Windows-1252.
-- `src/xer/model.ts`: tables -> Schedule (projects, WBS tree, activities, relationships)
-- `src/xer/format.ts`: durations, dates, lag, P6 display rules
-- `src/xer/columns.ts`: grid column definitions (group, text, optional html, WBS
-  rollup text, sort value). Add fixed columns to `COLUMNS` with a `group`; they appear
-  in the Columns dialog automatically. `scheduleColumns()` adds the activity code
-  columns and one column per activity UDF. Anything that looks a column up by key must use
-  `ViewState.columns` (includes UDFs), not `COLUMN_BY_KEY` (fixed only).
-- `src/xer/calendar.ts`: clndr_data parsing and working-time checks
-- `src/xer/rows.ts`: tree -> visible row list (expand state, hide-empty, sort within WBS)
-- `src/ui/`: DOM only. `app.ts` (state + wiring, menus, keys, prefs), `grid.ts`
-  (virtualized tree grid), `gantt.ts` (canvas), `relations.ts`, `search.ts`,
-  `menu.ts`, `toolbar.ts` (icon buttons under the menus; inline SVG icons; call
-  `refresh()` when what a button's enabled/pressed state depends on changes),
-  `columns-dialog.ts` (P6-style Columns dialog), `dom.ts` (helpers,
-  splitters, modal), `theme.ts` (colours, row height), `help.ts` (Help > User Guide
-  (F1), Keyboard Shortcuts, About)
-- `src/embed.ts`: "Save Viewer with Schedule" (gzip + base64 into a copy of the
-  page captured at startup, before the app renders), plus the review comments as a
-  `<script id="xer-comments" type="application/json">` block and the baseline .xer (if
-  one is loaded) as `<script id="xer-baseline">`
-- `src/xer/xlsx.ts`: File > Export to Excel. Writes the .xlsx by hand (zip via
-  `CompressionStream`, inline strings, styles); no library. `src/ui/column-filter.ts`:
-  the header funnel popup (value list + condition + sort).
-- `src/xer/compare.ts`: File > Compare with Baseline (match by Activity ID, WBS by code
-  path below the project node; per-activity change kinds, variance, logic diff). The
-  comparison rides in `ColumnContext.cmp`, so Baseline columns, filters and Excel see it.
-  `src/ui/changes.ts`: the Changes tab. `src/xer/trace.ts`: Trace Logic (FilterState.trace).
-  `src/xer/clipboard.ts`: Edit > Copy (TSV + coloured HTML table). `src/ui/calendars.ts`:
-  View > Calendars.
-- `src/xer/health.ts`: Review > Schedule Check (DCMA-style; FilterState.check); `src/ui/health.ts`
-  its tab. `src/xer/reports.ts`: Excel sheets for the Changes and Schedule Check tabs via
-  `buildTableXlsx` (xlsx.ts: any plain tables; `pack` assembles any number of sheets).
-  `src/xer/text.ts`: notebook / step HTML -> plain text (never render file HTML).
-  `src/ui/details.ts`: Activity Details tab (General, Relationships, Resources, Codes, UDFs,
-  Notebook, Steps; General reuses column `text`). `src/ui/spreadsheet.ts`: Resource Spreadsheet.
-- `src/xer/changelog.ts`: CHANGELOG.md in brief for Help > What's New (bullets need a bold
-  lead and a first sentence that stands alone), version comparison. `src/ui/table-select.ts`:
-  row selection + Ctrl+C for bottom-panel tables (the app's copy handler asks it first).
-- `src/xer/group.ts`: View > Group By. Bands per activity code value are Wbs-shaped nodes with
-  `group` set (not real WBS: no comments on them, `a.wbs` stays the real WBS); `shownSchedule`
-  swaps them in as `roots`, so rows, rollups, Gantt, copy and Excel work unchanged. App code
-  that shows or expands bands uses `this.shown()`, and `revealActivity` takes `bandOf`.
-  The choice is saved in prefs by code type name (`groupBy`).
-- `src/xer/comments.ts`: review comment model (targets, merge, save format; no DOM).
-  `src/ui/comments.ts`: comment dialogs and the Comments tab
+## File map
+- `src/xer/` (no DOM; runs under Node in tests): `parse.ts` (bytes -> tables, `decodeXer`
+  for Windows-1252), `model.ts` (tables -> Schedule), `format.ts` (durations, dates, lag),
+  `columns.ts` (grid columns; add fixed ones to `COLUMNS` with a `group`; `scheduleColumns()`
+  adds code and UDF columns; look columns up via `ViewState.columns`, not `COLUMN_BY_KEY`),
+  `calendar.ts`, `rows.ts` (tree -> visible rows), `filter.ts`, `usage.ts` (resource
+  spreading), `xlsx.ts` (hand-written .xlsx), `compare.ts` (baseline; rides in
+  `ColumnContext.cmp`), `trace.ts`, `clipboard.ts`, `health.ts` (Schedule Check),
+  `reports.ts` (extra Excel sheets), `text.ts` (file HTML -> plain text; never render file
+  HTML), `changelog.ts` (What's New), `group.ts` (Group By bands: Wbs-shaped nodes with
+  `group` set; use `this.shown()` for what's on screen), `comments.ts` (comment model, merge).
+- `src/ui/app.ts`: the App class (state, layout, loading, rows and selection, columns,
+  bottom panel, keys, drop, prefs). Its members are public for the `app-*.ts` modules,
+  which hold plain functions taking `app`: `app-menus.ts` (menu bar, toolbar items,
+  header and row menus), `app-comments.ts`, `app-filters.ts` (applyFilter, status note,
+  header funnel, checks, trace), `app-export.ts` (Save Viewer, Excel, copy),
+  `app-baseline.ts`, `app-shared.ts` (Prefs, defaults, small helpers).
+- Other `src/ui/`: `grid.ts` (virtualized tree grid), `gantt.ts` (canvas), `relations.ts`,
+  `search.ts`, `menu.ts`, `toolbar.ts` (call `refresh()` when a button's state changes),
+  `columns-dialog.ts`, `column-filter.ts`, `filter-menu.ts`, `dom.ts`, `theme.ts`, `help.ts`
+  (User Guide, shortcuts, About), `details.ts`, `resources.ts`, `spreadsheet.ts`,
+  `changes.ts`, `health.ts`, `comments.ts`, `calendars.ts`, `table-select.ts`, `update.ts`.
+- `src/embed.ts`: Save Viewer with Schedule (gzip + base64 into the page captured at
+  startup; comments in `<script id="xer-comments">`, baseline in `<script id="xer-baseline">`).
 - `src/features.ts`: feature flags; check them, don't delete features. `src/main.ts` starts
-  the app (saved copy, update check, dev `?file=`); `src/xer/index.ts` loads a file
-  (parse + model); `src/styles.css` holds all the CSS.
+  the app; `src/xer/index.ts` loads a file; `src/styles.css` holds all the CSS.
 - `tests/fixtures/sample.xer`: generated by `node scripts/make-fixture.mjs`
   (edit the script, not the .xer)
 
-Grid and Gantt share `ROW_HEIGHT` and `HEADER_HEIGHT`, and both scroll areas use
-`overflow: scroll` so their scrollbars match; change those together or rows drift.
-Vertical scroll sync: each side reports only real scrollTop changes (horizontal
-scrolls fire `scroll` too). The `scrollTop` setters (used for syncing) remember the
-value they set and the scroll handler swallows that echo instead of reporting it
-back: during a smooth wheel scroll the echo arrives a frame late and would drag the
-other pane backwards, making scrolling crawl. Because setters don't report back,
-code that scrolls one pane programmatically must set the other too (see `select`,
-`load`). Don't use an rAF-based "syncing" flag: hidden windows never run rAF.
-Grid rows are reused and selection is a class toggle: never re-create the row
-under the mouse on mousedown, or double-click stops working.
-
-`src/xer/*` must not touch the DOM; it runs under Node in tests.
-
-## XER format facts
-- Tab-delimited, CRLF. `ERMHDR` first line; `%T` table, `%F` fields, `%R` row, `%E` end.
-- Encoding is Windows-1252, NOT UTF-8 (en-dash 0x96, apostrophe 0x92, £, €).
-- One file can hold several projects; root WBS of each has `proj_node_flag='Y'`
-  and a `parent_wbs_id` pointing at an EPS node that is NOT in the file.
-- WBS: `PROJWBS.parent_wbs_id`, siblings by `seq_num`. Activities via `TASK.wbs_id`.
-- Show `task_code` as Activity ID, never `task_id`.
-- Durations, float, lag are HOURS (`*_hr_cnt`). Convert with the activity's
-  `CALENDAR.day_hr_cnt` (fallback 8); weeks/months use `week_hr_cnt`/`month_hr_cnt`.
-- Lag calendar: `SCHEDOPTIONS.sched_calendar_on_relationship_lag`
-  (rcal_Predecessor default, rcal_Successor, rcal_24Hour, rcal_ProjDefault).
-- Current dates (what P6 shows as Start/Finish):
-  Start = `act_start_date` ?? `restart_date` ?? `early_start_date` ?? `target_start_date`
-  Finish = `act_end_date` ?? `reend_date` ?? `early_end_date` ?? `target_end_date`
-  `target_*` are Planned dates, not current.
-- Data date: `PROJECT.last_recalc_date`.
-- Critical: `PROJECT.critical_path_type` CT_DrivPath -> `TASK.driving_path_flag='Y'`;
-  CT_TotFloat -> total float <= `critical_drtn_hr_cnt`. Completed is never critical.
-- `task_type`: TT_Task, TT_Mile (start milestone), TT_FinMile, TT_LOE, TT_WBS, TT_Rsrc.
-- `status_code`: TK_NotStart, TK_Active, TK_Complete.
-- `pred_type` PR_FS/PR_SS/PR_FF/PR_SF -> FS/SS/FF/SF.
-- `CALENDAR.clndr_data` is a nested `(0||Name(attrs)(children))` blob, parsed in
-  `src/xer/calendar.ts`. Lines inside it are separated by 0x7F (DEL), not newlines.
-  DaysOfWeek days are 1 = Sunday ... 7 = Saturday; ranges `s|06:00|f|10:00`
-  (`f|00:00` = midnight); Exceptions use `d|<days since 1899-12-30>`, with no
-  children = non-work day.
-- Driving relationships: `TASKPRED.aref` is the date the relationship imposes on the
-  successor (predecessor date + lag). It drives when no working time on the
-  successor's calendar lies between `aref` and the successor's remaining early start
-  (FS/SS: `restart_date` ?? `early_start_date`) or finish (FF/SF: `reend_date` ??
-  `early_end_date`). Exact equality is wrong: a Fri 17:00 finish drives a Mon 07:00
-  start. Completed successors are never driving. Without `aref`, only zero-lag
-  relationships can be judged (using the predecessor's date). On real files ~97% of
-  open activities with predecessors get a driver; the rest are held by the data
-  date or constraints, which is expected.
-- Resources: `RSRC` (`rsrc_short_name` = Resource ID, `rsrc_type` RT_Labor /
-  RT_Equip / RT_Mat) and `TASKRSRC` assignments (`target_qty` budget,
-  `act_reg_qty + act_ot_qty` actual, `remain_qty` remaining; actual dates
-  `act_start_date`/`act_end_date`, remaining dates `restart_date`/`reend_date`).
-  Rows with an empty `rsrc_id` are role-only and skipped. `src/xer/usage.ts` spreads
-  actual units from actual start to actual finish (or the data date) and remaining
-  units over the remaining dates, by working minutes on the activity's calendar
-  (linear; resource curves are ignored), stored as per-day running totals.
-- Labor units: `TASK.target_work_qty` / `act_work_qty` / `remain_work_qty`
-  (budgeted / actual / remaining, in hours). Nonlabor: `*_equip_qty`. WBS rows show sums.
-- Activity codes: `ACTVTYPE` (code types; `actv_code_type` is the name,
-  `actv_code_type_scope` AS_Global / AS_EPS / AS_Project), `ACTVCODE` (`short_name` =
-  value, `actv_code_name` = description; `parent_actv_code_id` makes sub-codes) and
-  `TASKACTV` (task_id, type, code). Only used types become columns, two each (value,
-  "(Description)"), keyed `code:<label>` / `codedesc:<label>`. The same name can exist
-  in several scopes (23517 has a Global and a Project "PG_Phase"): non-project ones
-  get "(Global)"/"(EPS)", remaining clashes are numbered. A sub-code shows its own value.
-- Other TASK fields used as columns: `expect_end_date`, `cstr_date`, `cstr_type2`,
-  `cstr_date2`, `duration_type` (DT_FixedDUR2 = Fixed Duration and Units,
-  DT_FixedDrtn = Fixed Duration and Units/Time, DT_FixedQty = Fixed Units,
-  DT_FixedRate = Fixed Units/Time), `complete_pct_type`, `phys_complete_pct`,
-  `rsrc_id` (primary resource, shown by name).
-- UDFs: `UDFTYPE` (`table_name` TASK = activity UDF, `udf_type_label` is the name
-  users see, `logical_data_type` FT_TEXT / FT_INT / FT_FLOAT_2_DECIMALS / FT_MONEY /
-  FT_START_DATE / FT_END_DATE / FT_STATICTYPE) and `UDFVALUE` (`fk_id` = task_id;
-  value in `udf_text`, `udf_number` or `udf_date` by type). Indicators
-  (FT_STATICTYPE) store `UDF_G1..G4` in `udf_text`, shown as red / yellow / green /
-  blue dots (mapping inferred from real data, not confirmed against P6). UDF column
-  keys are `udf:<label>` so a saved layout carries across files.
-- Dates are `yyyy-mm-dd hh:mm`; empty string = no value. Unknown tables/fields:
-  ignore, never crash. Real files have 13k+ activities and 40k+ relationships.
-
-## P6 look and feel (match P6, don't invent)
-- Menu bar; activity grid left, Gantt right (shared vertical scroll);
-  Predecessors | Successors panels below; status bar.
-- WBS band rows: bold, colour by level (P6/Python palette in `src/ui/theme.ts`),
-  white text on the dark levels, rolled-up start/finish and min total float.
-  Band Original / Remaining Duration come from the band's summarised dates, never from
-  activity durations (`wbsWorkHours`): working hours from start to finish, and from
-  max(start, data date) to finish (0 when all complete), on `Wbs.calendar` = the
-  calendar most of the band's (filtered) activities use, ties to the project calendar
-  (set in `rollUp`). Projects often have a no-holiday default calendar while the
-  activities have a Christmas break, so the project calendar overstates bands. Shown in
-  the Duration Unit with that calendar's hours per day. Cached per calendar and dates.
-- Selection: grid row and Gantt use amber (`--row-select`, `GANTT.selection`), never a
-  blue (WBS bands are blue). Filtering never drops the selection: `rebuildKeepingSelection`
-  keeps it at the same screen height, or centres it when a filter that hid it goes away.
-- Dates `dd-Mmm-yy`; suffix ` A` for actuals, `*` when a constraint applies.
-- Under each WBS band: its own activities first, then its child WBS bands.
-- Sorting reorders activities WITHIN their WBS; WBS stay in seq_num order.
-  Header click cycles ascending -> descending -> default (Start, then ID). Blanks sort last.
-- Double-click WBS row toggles; double-click relationship row jumps to that
-  activity (expanding its WBS). Keys: Ctrl+F, F3/Shift+F3, arrows, Left/Right
-  collapse/expand, Ctrl+O open.
-- Gantt: remaining = green, actual = blue, critical = red, milestones as
-  diamonds, WBS summary bars dark, data date as a vertical line.
-- Gantt relationship lines (View > Relationship Lines: None / Driving Only (default) / All):
-  driving solid, non-driving dashed, red when both ends are critical; lines touching
-  the selected activity drawn thicker. Only rows expanded into view get lines.
-- Predecessor/Successor panels have a Driving column. They sit on the Relationships tab of
-  Activity Details (bottom tab id "details"; old prefs with "relationships" are mapped).
-- Notebook (TASKMEMO + MEMOTYPE topics) and Steps (TASKPROC) are parsed into
-  `Activity.notes` / `Activity.steps`; HTML becomes plain text (`htmlToText`), 0x7F = newline.
-- Bottom panel tabs: Activity Details | Resource Usage | Resource Spreadsheet | Comments |
-  Changes | Schedule Check. Resource Usage (`src/ui/resources.ts`): the
-  resource list is kept exactly as wide as the grid and the histogram uses the Gantt's
-  timescale (`Gantt.timeline()`, redrawn from `onDraw`), so bars line up under the
-  Gantt. Bar period is a setting ("Bars by", default Week, or "Follow Gantt zoom"),
-  so weekly bars stay weekly when the Gantt is squeezed to fit the whole project; the
-  axis labels under the bars follow the Gantt's own tier so they stay readable.
-  Manning option (P6's "Calculate Average"): hours ÷ hours-per-person-week, scaled to
-  the bar's length (`toManning`), so monthly bars show average people too. Settings
-  are saved in prefs (`histogram`). One selected
-  resource: actual blue + remaining green. All / several (Ctrl-click): stacked, one
-  palette colour per resource, actual in a darker shade. The y scale is fixed for the
-  whole project at the current zoom so bars don't jump while scrolling. The resource
-  list sorts by header click and has a filter row (`valueTest` in filter.ts); with "All
-  Resources" selected and the list filtered, "all" means the listed resources (histogram
-  and activity filter). Selecting
-  resources filters activities (combined with the other filters in `applyFilter`)
-  only while the Resource Usage tab is on screen and its checkbox is ticked; the
-  status bar's filter note names it. Clear Filters also resets to All Resources.
-- Menus: View is grouped (Columns / units / Hide Empty WBS; expand; Clear Sort;
-  Toolbar / Gantt Chart / Show on Bottom (P6's name: the bottom
-  tabs, or None); Relationship Lines / Zoom / Go to Data Date).
-  Right-clicking a column header opens a menu (sort, filter, clear filter, hide,
-  Columns...). The Filter menu (`src/ui/filter-menu.ts`; the toolbar funnel opens it via
-  `MenuBar.openAt`) has the quick filters (status, critical, milestones, with comments,
-  Active Between... dialog, Look Ahead from the data date), Filter Row and Clear Filters.
-- Filters: the quick filters above, and a filter row under the grid headers (Filter >
-  Filter Row, Ctrl+Shift+F, off by default). While anything is filtered (`view.filter`,
-  which includes the resource filter) the status bar shows a yellow "Filter on: showing
-  n of m" note and Clear Filters is enabled; opening a file resets and re-applies. Logic is in `src/xer/filter.ts`; column expressions follow
-  `Column.kind` (text: contains / =x / <>x; number and date: > < >= <= = <>; numbers
-  are in the displayed duration unit). While filtering, WBS with no matches are hidden
-  and WBS totals are re-added from matching activities only (`applyRollups`), like P6.
-  Column funnels (`FilterState.values`: column key -> ticked display texts) give an
-  Excel-style value list; its values come from activities passing the OTHER filters.
-  Hiding the filter row keeps typed filters (funnels stay highlighted, the status note
-  stays), so nothing is filtered invisibly. Changing the Duration Unit drops ticked values on duration
-  columns (their text changed). The filter row's inputs are only rebuilt when
-  columns/widths change, never while typing (that would steal focus).
-- Export to Excel (Ctrl+E = all rows, or rows as shown): visible columns in order,
-  current sort/filters; activity dates/numbers as values (via `sortValue`), WBS rows as
-  coloured bold rows with outline levels (max 7), WBS dates/numbers parsed back from
-  their text. Uses `showSaveFilePicker` when available, else a download.
-- Jumping to an activity (Find, relationship double-click) also scrolls the Gantt
-  sideways to its bar. Double-clicking a row in the Gantt zooms to its bar
-  (`Gantt.focusRange`), like P6; it does not expand/collapse WBS.
-- Baseline (File > Compare with Baseline): variance = baseline minus current in working
-  hours on the activity's calendar (P6 sign: negative = later). Baseline bars are thin
-  yellow bars under the current bars, which move up 3 px while a baseline is loaded.
-  "Any change" excludes progress-only changes. Opening another .xer keeps the baseline.
-- Right-click popups (`popupMenu`) support submenus, like the menu bar. Grid and Gantt share
-  `rowMenu` (index -1 = empty area); `ganttOptions` is shared with the View menu.
-- Dragging on the Gantt or its header stretches the timescale (`startStretch`) and holds the
-  tiers (`held`) until the next zoom; View > Timescale fixes them. Periods too narrow to
-  label are labelled every nth (`periods`). Dragging a grid header moves its column.
-- Jumping (`goTo`) to an activity the filter hides adds it to `extras`: shown until
-  `applyFilter()` runs without `keepExtras` (P6 behaviour). `view.filter` includes extras.
-- Files open fully expanded (`FEATURES.defaultExpandLevel`). `beforeunload` warns when a
-  refresh would lose an opened .xer or baseline (not a saved copy's own) or comments.
-
-## Review comments
-- Never in the .xer and never imported into P6: they live in the saved HTML file.
-  Reviewers add them (right-click a row / Ctrl+M / Review menu), save, and send the
-  file back; the scheduler imports several returned files at once (Review > Import
-  Reviewers' Files, or drop several .html on an open schedule) and ticks Done.
-- Targets are keyed by Activity ID (`task_code`) or WBS full code plus project short
-  name, never internal ids, so comments land on the right row in a newer export.
-  Each comment keeps a snapshot of the row's dates; the panel's automatic Status column
-  says "Moved since" when they differ (also "Not in this schedule" and "Done by").
-- Merging (`mergeComments`) is by comment id; the copy with the later `updated` wins.
-  Replies (`replies`) merge separately by reply id (later `updated` wins, deletes are
-  tombstones), and adding one doesn't bump the comment's `updated`, so a reviewer's edit
-  and the scheduler's reply made in different files both survive.
-  Deletes are tombstones (`deleted: true`) and are saved too, so merging an older
-  file can't bring a deleted comment back. Importing the same file twice is a no-op.
-- Saving: Ctrl+S includes the comments; a reviewer's copy is named
-  `<schedule> - comments <name>.html`. Unsaved changes mark the tab "*", trigger the
-  browser's leave-page warning, and are backed up in localStorage
-  (`xer-viewer-comment-draft:<project>`) and recovered on the next open; saving clears it.
+## Must-knows
+- Grid and Gantt share `ROW_HEIGHT` and `HEADER_HEIGHT` and use `overflow: scroll`;
+  change them together. Scroll sync swallows its own echo; no rAF "syncing" flags. Grid rows
+  are reused: never re-create the row under the mouse on mousedown. (Details in docs.)
+- XER encoding is Windows-1252. Durations/float/lag are hours. Show `task_code`, never
+  `task_id`. Current dates are not `target_*` (Planned). (Details in docs.)
+- Selection is amber, never blue (WBS bands are blue). Match P6's look; don't invent.
 - Comment text is user content: always escape it (`esc`) and keep `serializeComments`
-  escaping "<" so a comment can't close the script tag.
-- No identity check: the reviewer name is typed and remembered per browser.
+  escaping "<" so a comment can't close the script tag. Comments never go into the .xer.
 
 ## Rules
 - Must stay smooth at 20k+ activities: grid and Gantt render only visible rows.
@@ -287,3 +83,4 @@ under the mouse on mousedown, or double-click stops working.
 - When you add or change something users can do (a menu item, shortcut, panel,
   filter or setting), update the User Guide and shortcuts in `src/ui/help.ts` and the
   README in the same change.
+- When behaviour described in `docs/` changes, update that doc in the same change.
